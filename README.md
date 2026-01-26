@@ -3,9 +3,17 @@
 STEMify is a local-first web app that turns natural-language STEM prompts into interactive, editable 3D visualizations.
 
 - Frontend: Next.js (App Router) + React + TypeScript
-- Styling: Tailwind CSS
+- Styling: Tailwind CSS (v4) + shadcn/ui
 
 ## Development
+
+Install deps:
+
+```bash
+pnpm install
+```
+
+Run dev server:
 
 ```bash
 pnpm dev

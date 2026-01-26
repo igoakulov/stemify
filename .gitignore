@@ -24,6 +24,9 @@
 .DS_Store
 *.pem
 
+# macOS
+**/.DS_Store
+
 # repo-specific (kept out of app repo)
 /specs/
 /scenes/

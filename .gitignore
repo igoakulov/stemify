@@ -28,7 +28,7 @@
 **/.DS_Store
 
 # repo-specific (kept out of app repo)
-/specs/
+/docs/
 /scenes/
 
 # debug

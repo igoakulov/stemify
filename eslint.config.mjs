@@ -16,6 +16,7 @@ const eslintConfig = defineConfig([
     // Repo-local artifacts:
     "scenes/**",
     "specs/**",
+    "docs/**",
   ]),
 ]);
 

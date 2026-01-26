@@ -24,6 +24,10 @@
 .DS_Store
 *.pem
 
+# repo-specific (kept out of app repo)
+/specs/
+/scenes/
+
 # debug
 npm-debug.log*
 yarn-debug.log*

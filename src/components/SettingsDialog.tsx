@@ -6,40 +6,58 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
+import { Settings } from "lucide-react";
+import {
+  clear_prompt_override,
+  load_prompt_override,
+  save_prompt_override,
+  type PromptId,
+} from "@/lib/prompts/store";
 import {
   clear_openrouter_api_key,
   load_openrouter_api_key,
   save_openrouter_api_key,
 } from "@/lib/settings/storage";
-import {
-  clear_system_prompt_override,
-  load_default_system_prompt_md,
-  load_system_prompt_override,
-  save_system_prompt_override,
-} from "@/lib/prompts/system_prompt";
+
+const PROMPT_INFO: Record<PromptId, { name: string; description: string }> = {
+  start: {
+    name: "Start",
+    description: "Sent at the start of every conversation",
+  },
+  ask: {
+    name: "Ask",
+    description: "Sent when user is asking a question",
+  },
+  build: {
+    name: "Build",
+    description: "Sent when user wants to create / update a scene",
+  },
+};
 
 export function SettingsDialog() {
   const [is_mounted, set_is_mounted] = useState(false);
   const [open, set_open] = useState(false);
 
   useEffect(() => {
-    // Avoid SSR/client hydration mismatches from Radix internal IDs.
-    // Use rAF to avoid eslint's setState-in-effect rule.
     const raf = window.requestAnimationFrame(() => {
       set_is_mounted(true);
     });
 
+    const handleOpenSettings = () => {
+      set_open(true);
+    };
+
+    window.addEventListener("stemify:open-settings", handleOpenSettings);
+
     return () => {
       window.cancelAnimationFrame(raf);
+      window.removeEventListener("stemify:open-settings", handleOpenSettings);
     };
   }, []);
 
@@ -50,33 +68,37 @@ export function SettingsDialog() {
     return load_openrouter_api_key();
   }, [is_mounted]);
 
-  const [prompt_md, set_prompt_md] = useState<string>("");
-  const [prompt_draft, set_prompt_draft] = useState<string>("");
-  const [prompt_error, set_prompt_error] = useState<string>("");
+  const [active_prompt, set_active_prompt] = useState<PromptId>("start");
+  const [prompt_drafts, set_prompt_drafts] = useState<Record<PromptId, string>>({
+    start: "",
+    ask: "",
+    build: "",
+  });
+  const [prompt_errors, set_prompt_errors] = useState<Record<PromptId, string>>({ start: "", ask: "", build: "" });
 
   useEffect(() => {
     if (!open) return;
 
-    const raf = window.requestAnimationFrame(() => {
-      const override = load_system_prompt_override();
+    const raf = window.requestAnimationFrame(async () => {
+      for (const pid of (["start", "ask", "build"] as PromptId[])) {
+        const override = load_prompt_override(pid);
+        if (override !== null) {
+          set_prompt_drafts((prev) => ({ ...prev, [pid]: override }));
+          set_prompt_errors((prev) => ({ ...prev, [pid]: "" }));
+          continue;
+        }
 
-      if (override !== null) {
-        set_prompt_md(override);
-        set_prompt_draft(override);
-        set_prompt_error("");
-        return;
+        try {
+          const md = await fetch(`/prompts/${pid}.md`, { cache: "no-store" }).then((r) => {
+            if (!r.ok) throw new Error("Failed to load");
+            return r.text();
+          });
+          set_prompt_drafts((prev) => ({ ...prev, [pid]: md }));
+          set_prompt_errors((prev) => ({ ...prev, [pid]: "" }));
+        } catch (e) {
+          set_prompt_errors((prev) => ({ ...prev, [pid]: e instanceof Error ? e.message : "Failed to load" }));
+        }
       }
-
-      load_default_system_prompt_md()
-        .then((md: string) => {
-          set_prompt_md(md);
-          set_prompt_draft(md);
-          set_prompt_error("");
-        })
-        .catch((e: unknown) => {
-          const msg = e instanceof Error ? e.message : String(e);
-          set_prompt_error(msg);
-        });
     });
 
     return () => {
@@ -87,8 +109,6 @@ export function SettingsDialog() {
   useEffect(() => {
     if (!open) return;
 
-    // Load stored key into the input when opening.
-    // Use rAF to avoid eslint's setState-in-effect rule.
     const raf = window.requestAnimationFrame(() => {
       set_api_key_input(stored_api_key);
     });
@@ -98,10 +118,12 @@ export function SettingsDialog() {
     };
   }, [open, stored_api_key]);
 
-
   const on_save_key = () => {
-    // Hygiene: never log the key.
-    save_openrouter_api_key(api_key_input.trim());
+    const trimmed = api_key_input.trim();
+    save_openrouter_api_key(trimmed);
+    if (trimmed) {
+      window.dispatchEvent(new Event("stemify:api-key-saved"));
+    }
   };
 
   const on_clear_key = () => {
@@ -109,106 +131,120 @@ export function SettingsDialog() {
     set_api_key_input("");
   };
 
+  const on_reset_prompt = (pid: PromptId) => {
+    clear_prompt_override(pid);
+    fetch(`/prompts/${pid}.md`, { cache: "no-store" })
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to load");
+        return r.text();
+      })
+      .then((md) => {
+        set_prompt_drafts((prev) => ({ ...prev, [pid]: md }));
+        set_prompt_errors((prev) => ({ ...prev, [pid]: "" }));
+      })
+      .catch((e) => {
+        set_prompt_errors((prev) => ({ ...prev, [pid]: e instanceof Error ? e.message : "Failed" }));
+      });
+  };
+
+  const on_save_prompt = (pid: PromptId) => {
+    const trimmed = prompt_drafts[pid].trim();
+    if (trimmed.length === 0) {
+      set_prompt_errors((prev) => ({ ...prev, [pid]: "Prompt cannot be empty." }));
+      return;
+    }
+    save_prompt_override(pid, prompt_drafts[pid]);
+    set_prompt_errors((prev) => ({ ...prev, [pid]: "" }));
+  };
+
   if (!is_mounted) return null;
 
   return (
     <Dialog open={open} onOpenChange={set_open}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          Settings
+        <Button
+          type="button"
+          variant="toolbar"
+          size="icon"
+          className="h-8 w-8"
+          aria-label="Settings"
+        >
+          <Settings className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-w-2xl bg-white text-zinc-950">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
-          <DialogDescription>
-            Local-first: your OpenRouter API key is stored in your browser.
-          </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="openrouter">
-          <TabsList>
-            <TabsTrigger value="openrouter">OpenRouter</TabsTrigger>
-            <TabsTrigger value="prompt">System Prompt</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="openrouter" className="space-y-4">
-            <div className="space-y-2">
-              <div className="text-sm font-medium">OpenRouter API key</div>
-              <Input
-                value={api_key_input}
-                placeholder="sk-or-..."
-                onChange={(e) => set_api_key_input(e.target.value)}
-                type="password"
-                autoComplete="off"
-              />
-              <div className="text-xs text-muted-foreground">
-                Tip: don’t paste keys into URLs. STEMify never logs your key.
-              </div>
+        <div className="space-y-6">
+          <div className="space-y-2">
+            <div className="text-sm font-medium">OpenRouter API KEY</div>
+            <Input
+              value={api_key_input}
+              placeholder="sk-or-..."
+              onChange={(e) => set_api_key_input(e.target.value)}
+              type="password"
+              autoComplete="off"
+            />
+            <div className="text-xs text-muted-foreground">
+              Local-only: your key is stored in your browser and never logged.
             </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" onClick={on_save_key}>
+            <div className="flex gap-2 pt-1">
+              <Button type="button" size="sm" onClick={on_save_key}>
                 Save
               </Button>
-              <Button type="button" variant="outline" onClick={on_clear_key}>
+              <Button type="button" variant="outline" size="sm" onClick={on_clear_key}>
                 Clear
               </Button>
             </div>
+          </div>
 
-          </TabsContent>
+          <div className="space-y-3">
+            <div className="text-sm font-medium">System prompts</div>
 
-          <TabsContent value="prompt" className="space-y-3">
-            <div className="text-sm text-muted-foreground">
-              The system prompt is loaded from `public/prompts/system_prompt.md`. Changes are saved locally in your browser.
+            <div className="flex gap-1 border-b border-zinc-200 pb-1">
+              {(["start", "ask", "build"] as PromptId[]).map((pid) => (
+                <button
+                  key={pid}
+                  type="button"
+                  onClick={() => set_active_prompt(pid)}
+                  className={`px-3 py-1.5 text-xs transition-colors ${
+                    active_prompt === pid
+                      ? "text-zinc-950 font-medium underline underline-offset-4"
+                      : "text-zinc-500 hover:text-zinc-700"
+                  }`}
+                >
+                  {PROMPT_INFO[pid].name}
+                </button>
+              ))}
             </div>
-            <Textarea
-              value={prompt_draft || prompt_md || prompt_error || ""}
-              onChange={(e) => set_prompt_draft(e.target.value)}
-              className="max-h-64 min-h-64 whitespace-pre-wrap font-mono text-xs"
-            />
 
-            <div className="flex items-center justify-between">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  clear_system_prompt_override();
-
-                  load_default_system_prompt_md()
-                    .then((md: string) => {
-                      set_prompt_md(md);
-                      set_prompt_draft(md);
-                      set_prompt_error("");
-                    })
-                    .catch((e: unknown) => {
-                      const msg = e instanceof Error ? e.message : String(e);
-                      set_prompt_error(msg);
-                    });
-                }}
-              >
-                Reset to default
-              </Button>
-
-              <Button
-                type="button"
-                onClick={() => {
-                  const trimmed = prompt_draft.trim();
-                  if (trimmed.length === 0) {
-                    set_prompt_error("Prompt cannot be empty.");
-                    return;
-                  }
-
-                  save_system_prompt_override(prompt_draft);
-                  set_prompt_md(prompt_draft);
-                  set_prompt_error("");
-                }}
-              >
-                Save changes
-              </Button>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-muted-foreground">{PROMPT_INFO[active_prompt].description}</div>
+              </div>
+              <Textarea
+                value={prompt_drafts[active_prompt]}
+                onChange={(e) =>
+                  set_prompt_drafts((prev) => ({ ...prev, [active_prompt]: e.target.value }))
+                }
+                className="min-h-48 max-h-64 whitespace-pre-wrap font-mono text-xs"
+              />
+              {prompt_errors[active_prompt] && (
+                <div className="text-xs text-red-400">{prompt_errors[active_prompt]}</div>
+              )}
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => on_reset_prompt(active_prompt)}>
+                  Reset
+                </Button>
+                <Button type="button" size="sm" onClick={() => on_save_prompt(active_prompt)}>
+                  Save
+                </Button>
+              </div>
             </div>
-          </TabsContent>
-        </Tabs>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

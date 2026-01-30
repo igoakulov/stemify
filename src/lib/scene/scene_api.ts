@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import renderMathInElement from "katex/contrib/auto-render";
 import { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 
 import { create_axes_group } from "@/lib/scene/axes";
@@ -38,6 +39,18 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
   const addLabel: SceneApi["addLabel"] = ({ id, text, position, color, fontSizePx }) => {
     const div = document.createElement("div");
     div.textContent = text;
+
+    if (/\\\(|\\\[|\$\$|\$/.test(text)) {
+      renderMathInElement(div, {
+        throwOnError: false,
+        delimiters: [
+          { left: "$$", right: "$$", display: true },
+          { left: "\\[", right: "\\]", display: true },
+          { left: "$", right: "$", display: false },
+          { left: "\\(", right: "\\)", display: false },
+        ],
+      });
+    }
 
     const label = new CSS2DObject(div);
     label.position.copy(v3(position));

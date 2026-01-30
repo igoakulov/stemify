@@ -79,7 +79,7 @@ export function SceneViewport(props: SceneViewportProps) {
   return (
     <div
       ref={label_container_ref}
-      className="relative h-full w-full overflow-hidden rounded-lg border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950"
+      className="relative h-full w-full overflow-hidden rounded-2xl border border-white/5 bg-gradient-to-b from-zinc-900 to-zinc-950"
     >
       <canvas ref={canvas_ref} className="h-full w-full" />
     </div>

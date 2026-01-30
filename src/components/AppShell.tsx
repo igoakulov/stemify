@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { SceneHistoryDialog } from "@/components/SceneHistoryDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { SceneViewport } from "@/components/SceneViewport";
-import { create_empty_scene } from "@/lib/app_state";
+import { SceneToolbar } from "@/components/SceneToolbar";
+import { ChatPanel } from "@/components/chat/ChatPanel";
 import { seed_starter_scenes_if_empty } from "@/lib/scene/seed";
 import {
   load_saved_scenes,
@@ -14,7 +15,6 @@ import {
 } from "@/lib/scene/store";
 
 export function AppShell() {
-  const active_scene = useMemo(() => create_empty_scene(), []);
   const [active_saved_scene, set_active_saved_scene] = useState<SavedScene | null>(null);
   const [recent_scenes, set_recent_scenes] = useState<SavedScene[]>([]);
   const active_scene_id_ref = useRef<string | null>(null);
@@ -82,117 +82,63 @@ export function AppShell() {
   }, [refresh_from_storage]);
 
   return (
-    <div className="h-dvh w-full bg-zinc-950 text-zinc-50">
-      <div className="grid h-full grid-cols-[minmax(0,7fr)_minmax(0,3fr)]">
-        <section className="border-r border-white/10">
-          <header className="flex h-14 items-center justify-between px-4">
-            <div className="flex items-baseline gap-3">
-              <div className="text-sm font-medium tracking-wide">STEMify</div>
-              <div className="text-xs text-white/50">{active_scene.title}</div>
-            </div>
-            <div className="flex items-center gap-2">
-               <button
-                 type="button"
-                 className="rounded-md border border-white/15 px-3 py-1.5 text-xs text-white/90 hover:border-white/30 disabled:opacity-60"
-                 aria-label="New scene"
-                 onClick={() => {
-                   window.dispatchEvent(new Event("stemify:new-scene"));
-                 }}
-               >
-                 New
-               </button>
-               <button
-                 type="button"
-                 className="rounded-md border border-white/15 px-3 py-1.5 text-xs text-white/90 hover:border-white/30 disabled:opacity-60"
-                 aria-label="Scene history"
-                 onClick={() => {
-                   window.dispatchEvent(new Event("stemify:open-history"));
-                 }}
-               >
-                 History
-               </button>
-               <button
-                 type="button"
-                 className="rounded-md border border-white/15 px-3 py-1.5 text-xs text-white/90 hover:border-white/30"
-                 aria-label="Reset camera"
-                 onClick={() => {
-                   window.dispatchEvent(new Event("stemify:camera-reset"));
-                 }}
-               >
-                 R
-               </button>
-               <div className="ml-2">
-                 <SettingsDialog />
-               </div>
-            </div>
-          </header>
-
-          <div className="h-[calc(100%-3.5rem)] p-4">
-             <SceneViewport sceneCode={active_saved_scene?.sceneCode ?? ""} />
-             <SceneHistoryDialog
-               onLoadScene={(scene) => {
-                 active_scene_id_ref.current = scene.id;
-                 refresh_from_storage(scene.id);
-               }}
-             />
-          </div>
-        </section>
-
-        <aside className="flex h-full flex-col">
-          <div className="flex-1 overflow-auto p-4">
-            <div className="mx-auto max-w-md pt-10">
-              <div className="text-sm font-medium text-white/90">Describe a STEM concept</div>
-              <div className="mt-2 text-xs leading-5 text-white/50">
-                Milestone 0: chat UI placeholder.
+    <div className="h-dvh w-full overflow-hidden bg-zinc-950 text-zinc-50">
+      <div className="grid h-full grid-cols-[minmax(0,7fr)_minmax(0,3fr)] overflow-hidden">
+         <section className="border-r border-white/5 relative h-full overflow-hidden">
+           <div className="h-full p-4 flex flex-col">
+              <div className="relative flex-1 min-h-0">
+                <SceneViewport sceneCode={active_saved_scene?.sceneCode ?? ""} />
+                <SceneToolbar
+                  onNewScene={() => window.dispatchEvent(new Event("stemify:new-scene"))}
+                  onOpenHistory={() => window.dispatchEvent(new Event("stemify:open-history"))}
+                  onResetCamera={() => window.dispatchEvent(new Event("stemify:camera-reset"))}
+                  onOpenSettings={() => window.dispatchEvent(new Event("stemify:open-settings"))}
+                />
               </div>
+           </div>
+           <SceneHistoryDialog
+             onLoadScene={(scene) => {
+               active_scene_id_ref.current = scene.id;
+               refresh_from_storage(scene.id);
+             }}
+           />
+           <SettingsDialog />
+         </section>
 
-               <div className="mt-6 rounded-xl border border-white/10 bg-white/3 p-4">
-                 <div className="text-xs text-white/60">Recent scenes</div>
-                 <div className="mt-3 space-y-2">
-                   {recent_scenes.map((s) => (
-                     <button
-                       key={s.id}
-                       type="button"
-                       className="w-full rounded-lg border border-white/10 px-3 py-2 text-left text-sm text-white/80 hover:border-white/25"
-                       onClick={() => {
-                         active_scene_id_ref.current = s.id;
-                         set_active_saved_scene(s);
-                       }}
-                     >
-                       {s.title}
-                     </button>
-                   ))}
-                 </div>
-                 <button
-                   type="button"
-                   className="mt-3 text-xs text-white/60 hover:text-white"
-                   onClick={() => {
-                     window.dispatchEvent(new Event("stemify:open-history"));
-                   }}
-                 >
-                   Show all
-                 </button>
-               </div>
+        <aside className="flex h-full flex-col overflow-hidden">
+          {active_saved_scene ? (
+            <ChatPanel active_scene={active_saved_scene} />
+          ) : (
+            <div className="flex-1 overflow-auto p-4">
+              <div className="mx-auto max-w-md pt-10">
+                <div className="text-sm font-medium text-primary">Recent scenes</div>
+                <div className="mt-6 space-y-2">
+                  {recent_scenes.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                       className="w-full rounded-lg border border-white/5 px-3 py-2 text-left text-sm text-secondary hover:border-white/10"
+                      onClick={() => {
+                        active_scene_id_ref.current = s.id;
+                        set_active_saved_scene(s);
+                      }}
+                    >
+                      {s.title}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="mt-3 text-xs text-secondary hover:text-white"
+                  onClick={() => {
+                    window.dispatchEvent(new Event("stemify:open-history"));
+                  }}
+                >
+                  Show all
+                </button>
+              </div>
             </div>
-          </div>
-
-          <div className="border-t border-white/10 p-4">
-            <div className="flex gap-2">
-                <textarea
-                  className="h-12 flex-1 resize-none rounded-lg border border-white/10 bg-white/3 px-3 py-2 text-sm text-white/90 placeholder:text-white/40 focus:border-white/25 focus:outline-none"
-
-                placeholder="e.g., explain dot product visually"
-                disabled
-              />
-              <button
-                type="button"
-                className="h-12 rounded-lg bg-white/90 px-4 text-sm font-medium text-zinc-950 disabled:opacity-60"
-                disabled
-              >
-                Send
-              </button>
-            </div>
-          </div>
+          )}
         </aside>
       </div>
     </div>

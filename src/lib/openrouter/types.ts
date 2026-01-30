@@ -3,6 +3,7 @@ export type OpenRouterModel = {
   name?: string;
   description?: string;
   context_length?: number;
+  created?: number;
 };
 
 export type OpenRouterError = {

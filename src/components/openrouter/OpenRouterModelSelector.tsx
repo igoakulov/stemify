@@ -13,6 +13,8 @@ import {
 import { list_openrouter_models } from "@/lib/openrouter/client";
 import type { OpenRouterModel } from "@/lib/openrouter/types";
 
+const DEFAULT_MODEL_ID = "openrouter/free";
+
 export function OpenRouterModelSelector() {
   const [is_mounted, set_is_mounted] = useState(false);
   const [models, set_models] = useState<OpenRouterModel[]>([]);
@@ -36,16 +38,30 @@ export function OpenRouterModelSelector() {
 
     list_openrouter_models("")
       .then((data) => {
-        if (!cancelled) {
-          set_models(data);
-          set_loading(false);
+        if (cancelled) return;
+
+        const model_ids = new Set(data.map((m) => m.id));
+        set_models(data);
+
+        const saved_model_id = load_openrouter_model_id();
+
+        if (saved_model_id === "") {
+          if (model_ids.has(DEFAULT_MODEL_ID)) {
+            set_model_id(DEFAULT_MODEL_ID);
+            save_openrouter_model_id(DEFAULT_MODEL_ID);
+          }
+        } else if (!model_ids.has(saved_model_id)) {
+          set_model_id("");
+          save_openrouter_model_id("");
         }
+
+        set_loading(false);
       })
       .catch(() => {
-        if (!cancelled) {
-          set_models([]);
-          set_loading(false);
-        }
+        if (cancelled) return;
+
+        set_models([]);
+        set_loading(false);
       });
 
     return () => {
@@ -75,7 +91,7 @@ export function OpenRouterModelSelector() {
     });
 
     return model_options;
-  }, [models, model_id]);
+  }, [models]);
 
   return loading ? null : (
     <ModelSelector

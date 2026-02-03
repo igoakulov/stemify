@@ -385,7 +385,7 @@ const UserMessage: FC = () => {
             <MessagePrimitive.Parts />
           </div>
           {show_meta && (
-            <div className="mt-0.5 flex justify-end pr-4 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+            <div className="mt-0.5 flex justify-end pr-4 opacity-0 group-hover:opacity-100">
               <span className="text-[10px] font-medium tracking-wide text-muted">
                 {mode === "ask" ? "ASK" : "BUILD"}
                 {model_name && ` • ${model_name}`}
@@ -474,7 +474,7 @@ const AssistantMessage: FC = () => {
             </div>
 
             {show_meta && (
-              <div className="mt-0.5 flex px-4 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+              <div className="mt-0.5 flex px-4 opacity-0 group-hover:opacity-100">
                 <span className="text-[10px] font-medium tracking-wide text-muted">
                   {mode === "ask" ? "ASK" : "BUILD"}
                   {model_name && ` • ${model_name}`}

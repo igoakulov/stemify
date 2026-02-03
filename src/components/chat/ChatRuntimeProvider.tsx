@@ -21,6 +21,7 @@ import { load_openrouter_model_id } from "@/lib/settings/storage";
 
 type ChatRuntimeProviderProps = {
   thread_id: ChatThreadId;
+  initial_mode?: "ask" | "build";
   children: React.ReactNode;
   on_send_user_message: (options: {
     thread_id: ChatThreadId;
@@ -30,6 +31,10 @@ type ChatRuntimeProviderProps = {
     on_first_delta: (assistant_message_id: string) => void;
   }) => Promise<void>;
   on_cancel: (options: { thread_id: ChatThreadId }) => Promise<void>;
+  on_first_assistant_response?: (options: {
+    thread_id: ChatThreadId;
+    first_user_message: string;
+  }) => Promise<void>;
 };
 
 function to_thread_message_like(message: ChatMessage): ThreadMessageLike {
@@ -55,6 +60,9 @@ export function create_message_id(prefix: string): string {
 }
 
 export function ChatRuntimeProvider(props: ChatRuntimeProviderProps) {
+  const { thread_id, initial_mode, children } = props;
+  const { on_send_user_message, on_cancel, on_first_assistant_response } = props;
+
   const subscribe = useCallback((on_store_change: () => void) => {
     const on_change = () => on_store_change();
     window.addEventListener("stemify:chat-changed", on_change);
@@ -62,18 +70,20 @@ export function ChatRuntimeProvider(props: ChatRuntimeProviderProps) {
   }, []);
 
   const get_snapshot = useCallback(() => {
-    ensure_thread(props.thread_id);
-    return get_thread(props.thread_id);
-  }, [props.thread_id]);
+    const mode = initial_mode ?? "ask";
+    const model_id = load_openrouter_model_id() || "openrouter/auto";
+    ensure_thread(thread_id, mode, model_id);
+    return get_thread(thread_id);
+  }, [thread_id, initial_mode]);
 
   const state = useSyncExternalStore(subscribe, get_snapshot, get_snapshot);
 
   const setMessages = useCallback(
     (messages: readonly ChatMessage[]) => {
-      set_thread(props.thread_id, { messages: [...messages], is_running: state.is_running });
+      set_thread(thread_id, { ...state, messages: [...messages] });
       window.dispatchEvent(new Event("stemify:chat-changed"));
     },
-    [props.thread_id, state.is_running],
+    [thread_id, state],
   );
 
   const onNew = useCallback(
@@ -100,18 +110,18 @@ export function ChatRuntimeProvider(props: ChatRuntimeProviderProps) {
           model_id,
         },
       };
-      append_message(props.thread_id, user_msg);
+      append_message(thread_id, user_msg);
 
-      set_is_running(props.thread_id, true);
+      set_is_running(thread_id, true);
       window.dispatchEvent(new Event("stemify:chat-changed"));
 
       try {
-        await props.on_send_user_message({
-          thread_id: props.thread_id,
+        await on_send_user_message({
+          thread_id,
           user_text,
           mode,
           model_id,
-          on_first_delta: (assistant_message_id) => {
+          on_first_delta: async (assistant_message_id) => {
             const assistant_msg: ChatMessage = {
               id: assistant_message_id,
               role: "assistant",
@@ -122,27 +132,40 @@ export function ChatRuntimeProvider(props: ChatRuntimeProviderProps) {
                 model_id,
               },
             };
-            append_message(props.thread_id, assistant_msg);
+            append_message(thread_id, assistant_msg);
+
+            const current_state = get_thread(thread_id);
+            const has_previous_assistant = current_state.messages.some(
+              (m) => m.role === "assistant" && m.id !== assistant_message_id,
+            );
+
+            if (!has_previous_assistant && on_first_assistant_response) {
+              await on_first_assistant_response({
+                thread_id,
+                first_user_message: user_text,
+              });
+            }
+
             window.dispatchEvent(new Event("stemify:chat-changed"));
           },
         });
       } finally {
-        set_is_running(props.thread_id, false);
+        set_is_running(thread_id, false);
         window.dispatchEvent(new Event("stemify:chat-changed"));
       }
     },
-    [props.on_send_user_message, props.thread_id],
+    [on_send_user_message, on_first_assistant_response, thread_id],
   );
 
   const onCancel = useCallback(async () => {
-    set_is_running(props.thread_id, false);
+    set_is_running(thread_id, false);
     window.dispatchEvent(new Event("stemify:chat-changed"));
-    await props.on_cancel({ thread_id: props.thread_id });
-  }, [props.on_cancel, props.thread_id]);
+    await on_cancel({ thread_id });
+  }, [on_cancel, thread_id]);
 
   const onReload = useCallback(
     async (parent_id: string | null) => {
-      const snapshot = get_thread(props.thread_id);
+      const snapshot = get_thread(thread_id);
 
       const mode: "ask" | "build" = "ask";
 
@@ -173,12 +196,12 @@ export function ChatRuntimeProvider(props: ChatRuntimeProviderProps) {
 
       if (!user_text) return;
 
-      set_is_running(props.thread_id, true);
+      set_is_running(thread_id, true);
       window.dispatchEvent(new Event("stemify:chat-changed"));
 
       try {
-        await props.on_send_user_message({
-          thread_id: props.thread_id,
+        await on_send_user_message({
+          thread_id,
           user_text,
           mode,
           model_id: undefined,
@@ -193,16 +216,16 @@ export function ChatRuntimeProvider(props: ChatRuntimeProviderProps) {
                 model_id: undefined,
               },
             };
-            append_message(props.thread_id, assistant_msg);
+            append_message(thread_id, assistant_msg);
             window.dispatchEvent(new Event("stemify:chat-changed"));
           },
         });
       } finally {
-        set_is_running(props.thread_id, false);
+        set_is_running(thread_id, false);
         window.dispatchEvent(new Event("stemify:chat-changed"));
       }
     },
-    [props.on_send_user_message, props.thread_id],
+    [on_send_user_message, thread_id],
   );
 
   const runtime = useExternalStoreRuntime<ChatMessage>({
@@ -215,7 +238,7 @@ export function ChatRuntimeProvider(props: ChatRuntimeProviderProps) {
     convertMessage: (m) => to_thread_message_like(m),
   });
 
-  return <AssistantRuntimeProvider runtime={runtime}>{props.children}</AssistantRuntimeProvider>;
+  return <AssistantRuntimeProvider runtime={runtime}>{children}</AssistantRuntimeProvider>;
 }
 
 export function append_to_assistant_message(options: {

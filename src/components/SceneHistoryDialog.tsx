@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Copy, Trash2, Check, ArrowRight } from "lucide-react";
+import { Trash2, ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -26,7 +26,25 @@ import {
   load_saved_scenes,
   type SavedScene,
 } from "@/lib/scene/store";
-import { get_thread } from "@/lib/chat/store";
+import { get_thread, remove_thread } from "@/lib/chat/store";
+
+function make_confirm_dialog_key_handler(
+  on_confirm: () => void,
+): (e: React.KeyboardEvent<HTMLDivElement>) => void {
+  return (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      on_confirm();
+    }
+    if (e.key === " ") {
+      e.preventDefault();
+      const cancel_btn = document.querySelector(
+        "[data-slot='alert-dialog-cancel'] button",
+      ) as HTMLButtonElement | null;
+      cancel_btn?.click();
+    }
+  };
+}
 
 export type SceneHistoryDialogProps = {
   onLoadScene: (scene: SavedScene) => void;
@@ -37,52 +55,24 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
   const [open, set_open] = useState(false);
   const [confirm_new_open, set_confirm_new_open] = useState(false);
   const [scenes, set_scenes] = useState<SavedScene[]>([]);
-  const [copied_id, set_copied_id] = useState<string | null>(null);
+  const [confirm_delete_id, set_confirm_delete_id] = useState<string | null>(
+    null,
+  );
 
   const refresh = () => {
     set_scenes(load_saved_scenes());
   };
 
-  const copy_chat_to_clipboard = async (scene_id: string) => {
-    const snapshot = get_thread(scene_id);
+  const get_chat_title = (scene_id: string): string => {
+    const thread = get_thread(scene_id);
+    return thread.title ?? "";
+  };
 
-    const format_datetime = (timestamp: number): string => {
-      const iso = new Date(timestamp).toISOString();
-      return iso.slice(0, 16).replace("T", " ");
-    };
-
-    const extract_model_name = (model_id: string): string => {
-      const parts = model_id.split("/");
-      return parts[parts.length - 1] || model_id;
-    };
-
-    const out = snapshot.messages
-      .map((m) => {
-        if (m.role === "system") {
-          return `System:\n${m.content}`.trimEnd();
-        }
-
-        const header = m.role === "user" ? "User" : "Assistant";
-        const meta_parts: string[] = [];
-
-        if (m.meta?.mode) {
-          meta_parts.push(m.meta.mode.toUpperCase());
-        }
-        if (m.meta?.model_id) {
-          meta_parts.push(extract_model_name(m.meta.model_id));
-        }
-        if (m.created_at) {
-          meta_parts.push(format_datetime(m.created_at));
-        }
-
-        const meta_line = meta_parts.length > 0 ? ` (${meta_parts.join(", ")})` : "";
-        return `${header}${meta_line}:\n${m.content}`.trimEnd();
-      })
-      .join("\n\n---\n\n");
-
-    await navigator.clipboard.writeText(out);
-    set_copied_id(scene_id);
-    setTimeout(() => set_copied_id(null), 1500);
+  const confirm_delete = (scene_id: string) => {
+    remove_thread(scene_id);
+    delete_scene(scene_id);
+    refresh();
+    window.dispatchEvent(new CustomEvent("stemify:scenes-changed"));
   };
 
   useEffect(() => {
@@ -134,73 +124,61 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
           </DialogHeader>
 
           <div className="space-y-2">
-            {scenes.map((s) => (
-              <div
-                key={s.id}
-                className="flex items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium text-zinc-900">
-                    {s.title}
-                  </div>
-                </div>
+            {scenes.map((s) => {
+              const chat_title = get_chat_title(s.id);
+              const display_title = chat_title || s.title;
 
-                <div className="flex items-center gap-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-zinc-500 hover:text-zinc-900"
-                    onClick={() => {
-                      void copy_chat_to_clipboard(s.id);
-                    }}
-                    title={copied_id === s.id ? "Copied!" : "Copy chat"}
-                  >
-                    {copied_id === s.id ? (
-                      <Check className="h-4 w-4" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button>
-
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-zinc-500 hover:text-red-600"
-                    onClick={() => {
-                      delete_scene(s.id);
-                      refresh();
-                      window.dispatchEvent(
-                        new CustomEvent("stemify:scenes-changed"),
-                      );
-                    }}
-                    title="Delete scene"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-
-                  <Button
-                    type="button"
-                    variant="default"
-                    size="icon"
-                    className="h-8 w-8"
+              return (
+                <div
+                  key={s.id}
+                  className="flex items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2"
+                >
+                  <div
+                    className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-900 cursor-pointer hover:text-zinc-700"
                     onClick={() => {
                       props.onLoadScene(s);
                       set_open(false);
-                      window.dispatchEvent(
-                        new CustomEvent("stemify:scenes-changed", {
-                          detail: { activeId: s.id },
-                        }),
-                      );
                     }}
-                    title="Load scene"
                   >
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
+                    {display_title}
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-zinc-500 hover:text-red-600"
+                      onClick={() => {
+                        set_confirm_delete_id(s.id);
+                      }}
+                      title="Delete scene"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-zinc-500 hover:text-zinc-900"
+                      onClick={() => {
+                        props.onLoadScene(s);
+                        set_open(false);
+                        window.dispatchEvent(
+                          new CustomEvent("stemify:scenes-changed", {
+                            detail: { activeId: s.id },
+                          }),
+                        );
+                      }}
+                      title="Load scene"
+                    >
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             {!has_any ? (
               <div className="rounded-md border border-dashed border-zinc-200 p-6 text-sm text-zinc-500">
@@ -225,23 +203,68 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
       </Dialog>
 
       <AlertDialog open={confirm_new_open} onOpenChange={set_confirm_new_open}>
-        <AlertDialogContent>
+        <AlertDialogContent onKeyDown={make_confirm_dialog_key_handler(() => {
+          set_open(false);
+          window.dispatchEvent(new Event("stemify:confirm-new-scene"));
+          set_confirm_new_open(false);
+        })}>
           <AlertDialogHeader>
             <AlertDialogTitle>Create new scene?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will reset to a blank scene. Your current scene remains in
-              history.
+              This will save your current scene, with the conversation, and open
+              a new one.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel asChild>
+              <Button variant="outline" type="button">Cancel</Button>
+            </AlertDialogCancel>
             <AlertDialogAction
+              autoFocus
               onClick={() => {
+                set_open(false);
                 window.dispatchEvent(new Event("stemify:confirm-new-scene"));
                 set_confirm_new_open(false);
               }}
             >
               Create
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={confirm_delete_id !== null}
+        onOpenChange={() => set_confirm_delete_id(null)}
+      >
+        <AlertDialogContent onKeyDown={make_confirm_dialog_key_handler(() => {
+          if (confirm_delete_id) {
+            confirm_delete(confirm_delete_id);
+          }
+          set_confirm_delete_id(null);
+        })}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete scene?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this scene and its conversation
+              history.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+            <AlertDialogFooter>
+            <AlertDialogCancel asChild>
+              <Button variant="outline" type="button">Cancel</Button>
+            </AlertDialogCancel>
+            <AlertDialogAction
+              autoFocus
+              onClick={() => {
+                if (confirm_delete_id) {
+                  confirm_delete(confirm_delete_id);
+                }
+                set_confirm_delete_id(null);
+              }}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

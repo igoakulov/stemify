@@ -36,6 +36,10 @@ const PROMPT_INFO: Record<PromptId, { name: string; description: string }> = {
     name: "Build",
     description: "Sent when user wants to create / update a scene",
   },
+  generate_title: {
+    name: "Generate Title",
+    description: "Sent to auto-generate scene title in the background",
+  },
 };
 
 export function SettingsDialog() {
@@ -67,18 +71,28 @@ export function SettingsDialog() {
   }, [is_mounted]);
 
   const [active_prompt, set_active_prompt] = useState<PromptId>("start");
-  const [prompt_drafts, set_prompt_drafts] = useState<Record<PromptId, string>>({
-    start: "",
-    ask: "",
-    build: "",
-  });
-  const [prompt_errors, set_prompt_errors] = useState<Record<PromptId, string>>({ start: "", ask: "", build: "" });
+  const [prompt_drafts, set_prompt_drafts] = useState<Record<PromptId, string>>(
+    {
+      start: "",
+      ask: "",
+      build: "",
+      generate_title: "",
+    },
+  );
+  const [prompt_errors, set_prompt_errors] = useState<Record<PromptId, string>>(
+    { start: "", ask: "", build: "", generate_title: "" },
+  );
 
   useEffect(() => {
     if (!open) return;
 
     const raf = window.requestAnimationFrame(async () => {
-      for (const pid of (["start", "ask", "build"] as PromptId[])) {
+      for (const pid of [
+        "start",
+        "ask",
+        "build",
+        "generate_title",
+      ] as PromptId[]) {
         const override = load_prompt_override(pid);
         if (override !== null) {
           set_prompt_drafts((prev) => ({ ...prev, [pid]: override }));
@@ -87,14 +101,19 @@ export function SettingsDialog() {
         }
 
         try {
-          const md = await fetch(`/prompts/${pid}.md`, { cache: "no-store" }).then((r) => {
+          const md = await fetch(`/prompts/${pid}.md`, {
+            cache: "no-store",
+          }).then((r) => {
             if (!r.ok) throw new Error("Failed to load");
             return r.text();
           });
           set_prompt_drafts((prev) => ({ ...prev, [pid]: md }));
           set_prompt_errors((prev) => ({ ...prev, [pid]: "" }));
         } catch (e) {
-          set_prompt_errors((prev) => ({ ...prev, [pid]: e instanceof Error ? e.message : "Failed to load" }));
+          set_prompt_errors((prev) => ({
+            ...prev,
+            [pid]: e instanceof Error ? e.message : "Failed to load",
+          }));
         }
       }
     });
@@ -141,14 +160,20 @@ export function SettingsDialog() {
         set_prompt_errors((prev) => ({ ...prev, [pid]: "" }));
       })
       .catch((e) => {
-        set_prompt_errors((prev) => ({ ...prev, [pid]: e instanceof Error ? e.message : "Failed" }));
+        set_prompt_errors((prev) => ({
+          ...prev,
+          [pid]: e instanceof Error ? e.message : "Failed",
+        }));
       });
   };
 
   const on_save_prompt = (pid: PromptId) => {
     const trimmed = prompt_drafts[pid].trim();
     if (trimmed.length === 0) {
-      set_prompt_errors((prev) => ({ ...prev, [pid]: "Prompt cannot be empty." }));
+      set_prompt_errors((prev) => ({
+        ...prev,
+        [pid]: "Prompt cannot be empty.",
+      }));
       return;
     }
     save_prompt_override(pid, prompt_drafts[pid]);
@@ -181,7 +206,12 @@ export function SettingsDialog() {
               <Button type="button" size="sm" onClick={on_save_key}>
                 Save
               </Button>
-              <Button type="button" variant="outline" size="sm" onClick={on_clear_key}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={on_clear_key}
+              >
                 Clear
               </Button>
             </div>
@@ -191,41 +221,59 @@ export function SettingsDialog() {
             <div className="text-sm font-medium">System prompts</div>
 
             <div className="flex gap-1 border-b border-zinc-200 pb-1">
-              {(["start", "ask", "build"] as PromptId[]).map((pid) => (
-                <button
-                  key={pid}
-                  type="button"
-                  onClick={() => set_active_prompt(pid)}
-                  className={`px-3 py-1.5 text-xs transition-colors ${
-                    active_prompt === pid
-                      ? "text-zinc-950 font-medium underline underline-offset-4"
-                      : "text-zinc-500 hover:text-zinc-700"
-                  }`}
-                >
-                  {PROMPT_INFO[pid].name}
-                </button>
-              ))}
+              {(["start", "ask", "build", "generate_title"] as PromptId[]).map(
+                (pid) => (
+                  <button
+                    key={pid}
+                    type="button"
+                    onClick={() => set_active_prompt(pid)}
+                    className={`px-3 py-1.5 text-xs transition-colors ${
+                      active_prompt === pid
+                        ? "text-zinc-950 font-medium underline underline-offset-4"
+                        : "text-zinc-500 hover:text-zinc-700"
+                    }`}
+                  >
+                    {PROMPT_INFO[pid].name}
+                  </button>
+                ),
+              )}
             </div>
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <div className="text-xs text-muted-foreground">{PROMPT_INFO[active_prompt].description}</div>
+                <div className="text-xs text-muted-foreground">
+                  {PROMPT_INFO[active_prompt].description}
+                </div>
               </div>
               <Textarea
                 value={prompt_drafts[active_prompt]}
                 onChange={(e) =>
-                  set_prompt_drafts((prev) => ({ ...prev, [active_prompt]: e.target.value }))
+                  set_prompt_drafts((prev) => ({
+                    ...prev,
+                    [active_prompt]: e.target.value,
+                  }))
                 }
                 className="min-h-48 max-h-64 whitespace-pre-wrap font-mono text-xs"
               />
               {prompt_errors[active_prompt] && (
-                <div className="text-xs text-red-400">{prompt_errors[active_prompt]}</div>
+                <div className="text-xs text-red-400">
+                  {prompt_errors[active_prompt]}
+                </div>
               )}
               <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => on_reset_prompt(active_prompt)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => on_reset_prompt(active_prompt)}
+                >
                   Reset
                 </Button>
-                <Button type="button" size="sm" onClick={() => on_save_prompt(active_prompt)}>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => on_save_prompt(active_prompt)}
+                >
                   Save
                 </Button>
               </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Copy, Trash2, Check, ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +26,7 @@ import {
   load_saved_scenes,
   type SavedScene,
 } from "@/lib/scene/store";
+import { get_thread } from "@/lib/chat/store";
 
 export type SceneHistoryDialogProps = {
   onLoadScene: (scene: SavedScene) => void;
@@ -35,9 +37,26 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
   const [open, set_open] = useState(false);
   const [confirm_new_open, set_confirm_new_open] = useState(false);
   const [scenes, set_scenes] = useState<SavedScene[]>([]);
+  const [copied_id, set_copied_id] = useState<string | null>(null);
 
   const refresh = () => {
     set_scenes(load_saved_scenes());
+  };
+
+  const copy_chat_to_clipboard = async (scene_id: string) => {
+    const snapshot = get_thread(scene_id);
+
+    const out = snapshot.messages
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .map((m) => {
+        const header = m.role === "user" ? "User" : "Assistant";
+        return `${header}:\n${m.content}`.trimEnd();
+      })
+      .join("\n\n---\n\n");
+
+    await navigator.clipboard.writeText(out);
+    set_copied_id(scene_id);
+    setTimeout(() => set_copied_id(null), 1500);
   };
 
   useEffect(() => {
@@ -83,7 +102,7 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
   return (
     <>
       <Dialog open={open} onOpenChange={set_open}>
-        <DialogContent className="max-w-xl">
+        <DialogContent className="max-w-xl bg-white text-zinc-950">
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
           </DialogHeader>
@@ -92,46 +111,73 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
             {scenes.map((s) => (
               <div
                 key={s.id}
-                className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2"
+                className="flex items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2"
               >
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-medium">{s.title}</div>
-                  <div className="truncate text-xs text-muted-foreground">
-                    {s.id}
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium text-zinc-900">
+                    {s.title}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                   <Button
-                    size="sm"
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-zinc-500 hover:text-zinc-900"
                     onClick={() => {
-                      props.onLoadScene(s);
-                      set_open(false);
-                      window.dispatchEvent(new CustomEvent("stemify:scenes-changed", { detail: { activeId: s.id } }));
+                      void copy_chat_to_clipboard(s.id);
                     }}
+                    title={copied_id === s.id ? "Copied!" : "Copy chat"}
                   >
-                    Load
+                    {copied_id === s.id ? (
+                      <Check className="h-4 w-4" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
                   </Button>
+
                   <Button
-                    size="sm"
-                    variant="destructive"
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-zinc-500 hover:text-red-600"
                     onClick={() => {
                       delete_scene(s.id);
                       refresh();
-                      window.dispatchEvent(new CustomEvent("stemify:scenes-changed"));
-
-                      // If the active scene is deleted, AppShell will pick the next most recent.
-
+                      window.dispatchEvent(
+                        new CustomEvent("stemify:scenes-changed"),
+                      );
                     }}
+                    title="Delete scene"
                   >
-                    Delete
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => {
+                      props.onLoadScene(s);
+                      set_open(false);
+                      window.dispatchEvent(
+                        new CustomEvent("stemify:scenes-changed", {
+                          detail: { activeId: s.id },
+                        }),
+                      );
+                    }}
+                    title="Load scene"
+                  >
+                    <ArrowRight className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
             ))}
 
             {!has_any ? (
-              <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
+              <div className="rounded-md border border-dashed border-zinc-200 p-6 text-sm text-zinc-500">
                 No saved scenes yet.
               </div>
             ) : null}
@@ -157,7 +203,8 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Create new scene?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will reset to a blank scene. Your current scene remains in history.
+              This will reset to a blank scene. Your current scene remains in
+              history.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

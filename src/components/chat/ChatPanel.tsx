@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Copy, Check } from "lucide-react";
+import { useCallback, useEffect, useRef } from "react";
+import { History, Plus, Settings } from "lucide-react";
 
 import { Thread } from "@/components/assistant-ui/thread";
 import {
@@ -20,23 +20,6 @@ export type ChatPanelProps = {
 
 export function ChatPanel(props: ChatPanelProps) {
   const thread_id = props.active_scene.id;
-  const [copied, set_copied] = useState(false);
-
-  const copy_chat_to_clipboard = useCallback(async () => {
-    const snapshot = get_thread(thread_id);
-
-    const out = snapshot.messages
-      .filter((m) => m.role === "user" || m.role === "assistant")
-      .map((m) => {
-        const header = m.role === "user" ? "User" : "Assistant";
-        return `${header}:\n${m.content}`.trimEnd();
-      })
-      .join("\n\n---\n\n");
-
-    await navigator.clipboard.writeText(out);
-    set_copied(true);
-    setTimeout(() => set_copied(false), 1500);
-  }, [thread_id]);
 
   const abort_ref = useRef<AbortController | null>(null);
 
@@ -81,7 +64,7 @@ export function ChatPanel(props: ChatPanelProps) {
           on_delta: (delta) => {
             if (assistant_message_id === null) {
               assistant_message_id = create_message_id("msg_assistant");
-              options.on_first_delta(assistant_message_id);
+              options.on_first_delta(assistant_message_id!);
             }
             append_to_assistant_message({
               thread_id: options.thread_id,
@@ -103,27 +86,51 @@ export function ChatPanel(props: ChatPanelProps) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-between gap-2 border-b border-white/5 px-3 py-2">
+      <div className="flex items-center justify-between gap-2 border-b border-white/5 px-4 py-2">
         <div className="text-sm font-medium text-white/80 truncate">
           {props.active_scene.title}
         </div>
 
-        <Button
-          type="button"
-          variant="toolbar"
-          size="icon"
-          className="h-7 w-7 transition-all duration-200"
-          onClick={() => {
-            void copy_chat_to_clipboard();
-          }}
-          title={copied ? "Copied!" : "Copy chat"}
-        >
-          {copied ? (
-            <Check className="h-4 w-4 text-white/80" />
-          ) : (
-            <Copy className="h-4 w-4" />
-          )}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="toolbar"
+            size="icon"
+            className="h-7 w-7 transition-all duration-200"
+            onClick={() => {
+              window.dispatchEvent(new Event("stemify:new-scene"));
+            }}
+            title="New scene"
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+
+          <Button
+            type="button"
+            variant="toolbar"
+            size="icon"
+            className="h-7 w-7 transition-all duration-200"
+            onClick={() => {
+              window.dispatchEvent(new Event("stemify:open-history"));
+            }}
+            title="Scene history"
+          >
+            <History className="h-4 w-4" />
+          </Button>
+
+          <Button
+            type="button"
+            variant="toolbar"
+            size="icon"
+            className="h-7 w-7 transition-all duration-200"
+            onClick={() => {
+              window.dispatchEvent(new Event("stemify:open-settings"));
+            }}
+            title="Settings"
+          >
+            <Settings className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1">

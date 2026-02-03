@@ -75,15 +75,15 @@ export function OpenRouterModelSelector() {
     });
 
     return model_options;
-  }, [models]);
+  }, [models, model_id]);
 
-  return (
-      <ModelSelector
+  return loading ? null : (
+    <ModelSelector
       value={model_id}
       options={options}
-      placeholder={loading ? "…" : "Select model"}
-      disabled={!is_mounted || loading}
+      placeholder="Select model"
       onChange={(next) => {
+        if (!next) return;
         set_model_id(next);
         save_openrouter_model_id(next);
       }}

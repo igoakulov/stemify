@@ -83,18 +83,15 @@ export function AppShell() {
 
   return (
     <div className="h-dvh w-full overflow-hidden bg-zinc-950 text-zinc-50">
-      <div className="grid h-full grid-cols-[minmax(0,7fr)_minmax(0,3fr)] overflow-hidden">
+      <div className="grid h-full grid-cols-[minmax(0,7fr)_minmax(240px,3fr)] overflow-hidden">
          <section className="border-r border-white/5 relative h-full overflow-hidden">
            <div className="h-full p-4 flex flex-col">
               <div className="relative flex-1 min-h-0">
-                <SceneViewport sceneCode={active_saved_scene?.sceneCode ?? ""} />
-                <SceneToolbar
-                  onNewScene={() => window.dispatchEvent(new Event("stemify:new-scene"))}
-                  onOpenHistory={() => window.dispatchEvent(new Event("stemify:open-history"))}
-                  onResetCamera={() => window.dispatchEvent(new Event("stemify:camera-reset"))}
-                  onOpenSettings={() => window.dispatchEvent(new Event("stemify:open-settings"))}
-                />
-              </div>
+                 <SceneViewport sceneCode={active_saved_scene?.sceneCode ?? ""} />
+                 <SceneToolbar
+                   onResetCamera={() => window.dispatchEvent(new Event("stemify:camera-reset"))}
+                 />
+               </div>
            </div>
            <SceneHistoryDialog
              onLoadScene={(scene) => {

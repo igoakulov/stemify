@@ -88,6 +88,9 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
     }
   } catch (error) {
     const error_message = error instanceof Error ? error.message : "Unknown error";
+    if (error instanceof Error && error.name === "AbortError") {
+      return;
+    }
     show_error(`Failed to get response from OpenRouter: ${error_message}`, {
       title: "OpenRouter Error",
       actions: [

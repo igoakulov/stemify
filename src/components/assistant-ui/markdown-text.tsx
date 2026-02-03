@@ -16,15 +16,27 @@ import { memo, useState, type FC } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+const KATEX_SELECT_STYLE = (
+  <style>{`
+    .katex, .katex *, .katex-element {
+      user-select: text !important;
+      -webkit-user-select: text !important;
+    }
+  `}</style>
+);
+
 export const MarkdownText = memo(function MarkdownText() {
   return (
-    <MarkdownTextPrimitive
-      remarkPlugins={[remarkGfm, remarkMath]}
-      rehypePlugins={[rehypeKatex]}
-      preprocess={normalize_latex_delimiters}
-      className="aui-md"
-      components={components}
-    />
+    <>
+      {KATEX_SELECT_STYLE}
+      <MarkdownTextPrimitive
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex]}
+        preprocess={normalize_latex_delimiters}
+        className="aui-md select-text"
+        components={components}
+      />
+    </>
   );
 });
 
@@ -77,24 +89,27 @@ function normalize_latex_delimiters(input: string): string {
 
 const components = memoizeMarkdownComponents({
   p: ({ className, ...props }) => (
-    <p className={cn("my-2.5 leading-normal first:mt-0 last:mb-0", className)} {...props} />
+    <p className={cn("my-2.5 leading-normal first:mt-0 last:mb-0 select-text", className)} {...props} />
   ),
   ul: ({ className, ...props }) => (
-    <ul className={cn("my-2 ml-4 list-disc marker:text-muted [&>li]:mt-1", className)} {...props} />
+    <ul className={cn("my-2 ml-4 list-disc marker:text-muted [&>li]:mt-1 select-text", className)} {...props} />
   ),
   ol: ({ className, ...props }) => (
     <ol
-      className={cn("my-2 ml-4 list-decimal marker:text-muted [&>li]:mt-1", className)}
+      className={cn("my-2 ml-4 list-decimal marker:text-muted [&>li]:mt-1 select-text", className)}
       {...props}
     />
   ),
+  li: ({ className, ...props }) => (
+    <li className={cn("select-text", className)} {...props} />
+  ),
   a: ({ className, ...props }) => (
-    <a className={cn("text-white underline underline-offset-2 hover:text-white/80", className)} {...props} />
+    <a className={cn("text-white underline underline-offset-2 hover:text-white/80 select-text", className)} {...props} />
   ),
   pre: ({ className, ...props }) => (
     <pre
       className={cn(
-        "overflow-x-auto rounded-t-none rounded-b-lg border border-white/5 border-t-0 bg-white/3 p-3 text-xs leading-relaxed",
+        "overflow-x-auto rounded-t-none rounded-b-lg border border-white/5 border-t-0 bg-white/3 p-3 text-xs leading-relaxed select-text",
         className,
       )}
       {...props}
@@ -106,7 +121,7 @@ const components = memoizeMarkdownComponents({
       <code
         className={cn(
           !isCodeBlock &&
-            "rounded-md border border-white/5 bg-white/5 px-1.5 py-0.5 font-mono text-[0.85em]",
+            "rounded-md border border-white/5 bg-white/5 px-1.5 py-0.5 font-mono text-[0.85em] select-text",
           className,
         )}
         {...props}

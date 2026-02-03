@@ -8,11 +8,9 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Settings } from "lucide-react";
 import {
   clear_prompt_override,
   load_prompt_override,
@@ -161,17 +159,6 @@ export function SettingsDialog() {
 
   return (
     <Dialog open={open} onOpenChange={set_open}>
-      <DialogTrigger asChild>
-        <Button
-          type="button"
-          variant="toolbar"
-          size="icon"
-          className="h-8 w-8"
-          aria-label="Settings"
-        >
-          <Settings className="h-4 w-4" />
-        </Button>
-      </DialogTrigger>
       <DialogContent className="max-w-2xl bg-white text-zinc-950">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>

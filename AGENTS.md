@@ -108,6 +108,38 @@ Defined in `src/app/globals.css`:
 - Example: Composer uses `rounded-2xl` (16px) with `p-2` (8px), buttons inside use `rounded-lg` (8px)
 - Formula check: 16 = 8 + 8 ✓
 
+### UI Component Guidelines
+
+**Priority order for UI components:**
+
+1. **Chat-related UI** → Use `@assistant-ui/react` and `@assistant-ui/react-markdown`
+   - Message bubbles, threads, composers, code blocks
+   - Override assistant-ui primitives via props (e.g., `components.CodeHeader`)
+   - Only fall back to custom/Tailwind if assistant-ui doesn't provide the primitive
+
+2. **Non-chat UI** → Use shadcn/ui components from `@/components/ui/`
+   - Buttons, dialogs, inputs, selects, etc.
+   - Import from the ui directory, not from external packages directly
+
+3. **Custom/Tailwind** → Last resort for unique cases
+   - Scene viewport, 3D canvas, custom visualizations
+   - Follow existing patterns in the codebase
+
+**Example:**
+```typescript
+// Good: Using assistant-ui for chat code blocks
+import { MarkdownTextPrimitive, type CodeHeaderProps } from "@assistant-ui/react-markdown";
+
+<MarkdownTextPrimitive
+  components={{
+    CodeHeader: MyCustomHeader,  // Override via props
+  }}
+/>
+
+// Bad: Building custom code blocks when assistant-ui provides them
+const MyCustomCodeBlock = () => { ... }  // Don't do this
+```
+
 ### File Organization
 
 ```
@@ -115,6 +147,7 @@ src/
   app/           # Next.js app router pages
   components/    # React components
     ui/          # shadcn/ui components
+    assistant-ui/  # Assistant-ui overrides and customizations
   lib/           # Utility functions and business logic
     chat/        # Chat-related logic
     prompts/     # Prompt management

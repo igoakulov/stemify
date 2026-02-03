@@ -83,9 +83,9 @@ export function AppShell() {
 
   return (
     <div className="h-dvh w-full overflow-hidden bg-zinc-950 text-zinc-50">
-      <div className="grid h-full grid-cols-[minmax(0,7fr)_minmax(240px,3fr)] overflow-hidden">
-         <section className="border-r border-white/5 relative h-full overflow-hidden">
-           <div className="h-full p-4 flex flex-col">
+      <div className="grid h-full grid-cols-[minmax(0,7fr)_minmax(310px,3fr)] overflow-hidden">
+          <section className="relative h-full overflow-hidden">
+            <div className="h-full flex flex-col">
               <div className="relative flex-1 min-h-0">
                  <SceneViewport sceneCode={active_saved_scene?.sceneCode ?? ""} />
                  <SceneToolbar

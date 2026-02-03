@@ -84,7 +84,7 @@ export const ChatStatusBanner: FC = () => {
                 {banner.title}
               </div>
             )}
-            <div className={`text-sm leading-relaxed ${styles.message}`}>
+            <div className={`text-sm leading-relaxed break-words ${styles.message}`}>
               {banner.message}
             </div>
 

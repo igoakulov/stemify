@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import type { SavedScene } from "@/lib/scene/store";
 import { get_thread } from "@/lib/chat/store";
 import { run_chat_turn } from "@/lib/chat/runner";
+import { clear_banner } from "@/lib/chat/banner";
 
 export type ChatPanelProps = {
   active_scene: SavedScene;
@@ -43,6 +44,7 @@ export function ChatPanel(props: ChatPanelProps) {
       model_id: string | undefined;
       on_first_delta: (assistant_message_id: string) => void;
     }) => {
+      clear_banner();
       abort_ref.current?.abort();
       const controller = new AbortController();
       abort_ref.current = controller;

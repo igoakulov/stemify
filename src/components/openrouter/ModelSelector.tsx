@@ -23,6 +23,7 @@ type ModelSelectorProps = {
   options: ModelOption[];
   placeholder?: string;
   onChange: (value: string) => void;
+  onClose?: () => void;
   disabled?: boolean;
   className?: string;
 };
@@ -32,6 +33,7 @@ export function ModelSelector({
   options,
   placeholder = "Select model",
   onChange,
+  onClose,
   disabled,
   className,
 }: ModelSelectorProps) {
@@ -58,8 +60,8 @@ export function ModelSelector({
   }, [flat_filtered_options]);
 
   const display_text = selected
-    ? selected.label.length > 20
-      ? selected.label.slice(0, 20) + "…"
+    ? selected.label.length > 17
+      ? selected.label.slice(0, 17) + "…"
       : selected.label
     : placeholder;
 
@@ -91,6 +93,7 @@ export function ModelSelector({
 
     if (e.key === "Escape") {
       set_open(false);
+      onClose?.();
       return;
     }
 
@@ -115,6 +118,7 @@ export function ModelSelector({
         onChange(selected_model.value);
         set_search("");
         set_open(false);
+        onClose?.();
       }
     }
   };
@@ -123,6 +127,7 @@ export function ModelSelector({
     onChange(model_value);
     set_search("");
     set_open(false);
+    onClose?.();
   };
 
   let current_index = 0;
@@ -138,6 +143,7 @@ export function ModelSelector({
         if (!is_open) {
           set_search("");
           set_highlighted_index(-1);
+          onClose?.();
           setTimeout(() => {
             search_input_ref.current?.blur();
           }, 0);
@@ -155,7 +161,6 @@ export function ModelSelector({
           "text-secondary hover:text-primary focus:ring-0 focus:ring-offset-0",
           className,
         )}
-        style={{ maxWidth: "200px" }}
       >
         <SelectValue placeholder={placeholder}>
           <span className={cn("truncate", !selected && "text-placeholder")}>

@@ -82,6 +82,9 @@ export function OpenRouterModelSelector() {
       value={model_id}
       options={options}
       placeholder="Select model"
+      onClose={() => {
+        window.dispatchEvent(new Event("stemify:model-selector-closed"));
+      }}
       onChange={(next) => {
         if (!next) return;
         set_model_id(next);

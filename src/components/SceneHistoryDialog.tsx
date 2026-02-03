@@ -46,11 +46,37 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
   const copy_chat_to_clipboard = async (scene_id: string) => {
     const snapshot = get_thread(scene_id);
 
+    const format_datetime = (timestamp: number): string => {
+      const iso = new Date(timestamp).toISOString();
+      return iso.slice(0, 16).replace("T", " ");
+    };
+
+    const extract_model_name = (model_id: string): string => {
+      const parts = model_id.split("/");
+      return parts[parts.length - 1] || model_id;
+    };
+
     const out = snapshot.messages
-      .filter((m) => m.role === "user" || m.role === "assistant")
       .map((m) => {
+        if (m.role === "system") {
+          return `System:\n${m.content}`.trimEnd();
+        }
+
         const header = m.role === "user" ? "User" : "Assistant";
-        return `${header}:\n${m.content}`.trimEnd();
+        const meta_parts: string[] = [];
+
+        if (m.meta?.mode) {
+          meta_parts.push(m.meta.mode.toUpperCase());
+        }
+        if (m.meta?.model_id) {
+          meta_parts.push(extract_model_name(m.meta.model_id));
+        }
+        if (m.created_at) {
+          meta_parts.push(format_datetime(m.created_at));
+        }
+
+        const meta_line = meta_parts.length > 0 ? ` (${meta_parts.join(", ")})` : "";
+        return `${header}${meta_line}:\n${m.content}`.trimEnd();
       })
       .join("\n\n---\n\n");
 

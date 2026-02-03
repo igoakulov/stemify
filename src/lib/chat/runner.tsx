@@ -7,14 +7,14 @@ import {
 } from "@/lib/settings/storage";
 import { upsert_scene, type SavedScene } from "@/lib/scene/store";
 
-import type { ChatThreadId } from "@/lib/chat/types";
+import type { ChatMessage, ChatThreadId } from "@/lib/chat/types";
 import {
   get_comment_markdown,
   get_scene_code,
   parse_model_output,
 } from "@/lib/chat/parse";
 import { validate_scene_code } from "@/lib/chat/scene_apply";
-import { replace_message } from "@/lib/chat/store";
+import { get_thread, replace_message } from "@/lib/chat/store";
 import { show_error, show_warning } from "@/lib/chat/banner";
 
 export type RunOptions = {
@@ -93,14 +93,6 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
     }
     show_error(`Failed to get response from OpenRouter: ${error_message}`, {
       title: "OpenRouter Error",
-      actions: [
-        {
-          label: "Open Settings",
-          onClick: () => {
-            window.dispatchEvent(new CustomEvent("stemify:open-settings"));
-          },
-        },
-      ],
     });
     throw error;
   }
@@ -113,27 +105,42 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
   }
 
   if (parsed.kind === "text") {
-    show_warning("Build mode expected JSON scene data but received plain text. The response is shown above, but no scene was updated.", {
-      title: "Unexpected Response Format",
+    show_warning("Assistant's response has no scene code, nothing to BUILD ;(", {
+      title: "Nothing to BUILD",
+      actions: [
+        {
+          label: "Try again",
+          onClick: () => {},
+        },
+      ],
     });
     throw new Error("Build mode expected JSON but received plain text.");
   }
 
   const scene_code = get_scene_code(parsed.payload);
   if (!scene_code) {
-    // Scene missing/invalid => discard everything (including comment).
-    // Keep the raw JSON visible for debugging.
-    show_error("Model returned JSON but no valid scene.sceneCode was found. The raw response is shown above.", {
-      title: "Invalid Scene Data",
+    show_warning("Assistant's response has no scene code, nothing to BUILD ;(", {
+      title: "Nothing to BUILD",
+      actions: [
+        {
+          label: "Try again",
+          onClick: () => {},
+        },
+      ],
     });
     throw new Error("Model returned JSON but no valid scene.sceneCode.");
   }
 
   const validation = validate_scene_code(scene_code);
   if (!validation.ok) {
-    // Keep the raw JSON visible for debugging.
-    show_error(`Scene validation failed: ${validation.error ?? "Unknown error"}. The raw response is shown above.`, {
-      title: "Scene Validation Error",
+    show_error("Assistant's code for the scene is invalid. Try making your prompt more clear.", {
+      title: "Scene Code Issue",
+      actions: [
+        {
+          label: "Edit prompt",
+          onClick: () => {},
+        },
+      ],
     });
     throw new Error(`Invalid scene code: ${validation.error ?? "Unknown error"}`);
   }
@@ -149,16 +156,25 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
   // Render comment into the assistant message if present.
   const md = get_comment_markdown(parsed.payload);
   if (md && assistant_message_id) {
-    replace_message(options.thread_id, assistant_message_id, {
-      content: md,
-    });
-    window.dispatchEvent(new Event("stemify:chat-changed"));
-    return;
+    const thread = get_thread(options.thread_id);
+    const current_msg = thread.messages.find((m: ChatMessage) => m.id === assistant_message_id);
+    if (current_msg) {
+      const json_block = "```json\n" + raw.trim() + "\n```";
+      const combined_content = json_block + "\n\n" + md;
+      replace_message(options.thread_id, assistant_message_id, {
+        content: combined_content,
+      });
+      window.dispatchEvent(new Event("stemify:chat-changed"));
+      return;
+    }
   }
 
-  // Scene applied but comment missing/invalid.
-  show_warning("Scene was applied successfully, but no explanation comment was provided.", {
-    title: "Missing Explanation",
-  });
-  throw new Error("Scene applied, but comment.markdown is missing or invalid.");
+  // Scene applied but comment missing/invalid - still show the JSON
+  if (assistant_message_id) {
+    const json_block = "```json\n" + raw.trim() + "\n```";
+    replace_message(options.thread_id, assistant_message_id, {
+      content: json_block,
+    });
+    window.dispatchEvent(new Event("stemify:chat-changed"));
+  }
 }

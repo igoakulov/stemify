@@ -150,6 +150,19 @@ const Composer: FC = () => {
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    const handle_model_selector_closed = () => {
+      setTimeout(() => {
+        input_ref.current?.focus();
+      }, 50);
+    };
+
+    window.addEventListener("stemify:model-selector-closed", handle_model_selector_closed);
+    return () => {
+      window.removeEventListener("stemify:model-selector-closed", handle_model_selector_closed);
+    };
+  }, []);
+
   const trigger_mode_toggle_feedback = () => {
     set_is_mode_toggle_active(true);
     setTimeout(() => set_is_mode_toggle_active(false), 150);
@@ -366,22 +379,51 @@ const UserMessage: FC = () => {
       className="mx-auto w-full max-w-2xl pb-2"
       data-role="user"
     >
-      <div className="group px-2">
-        <div className="ml-auto w-fit max-w-[85%] rounded-2xl bg-white/10 px-4 py-2 text-sm text-primary">
-          <MessagePrimitive.Parts />
-        </div>
-        {show_meta && (
-          <div className="mt-0.5 flex justify-end pr-4 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-            <span className="text-[10px] font-medium tracking-wide text-muted">
-              {mode === "ask" ? "ASK" : "BUILD"}
-              {model_name && ` • ${model_name}`}
-              {time_str && ` • ${time_str}`}
-            </span>
+      <div className="px-2">
+        <div className="group">
+          <div className="ml-auto w-fit max-w-[85%] rounded-2xl bg-white/10 px-4 py-2 text-sm text-primary">
+            <MessagePrimitive.Parts />
           </div>
-        )}
+          {show_meta && (
+            <div className="mt-0.5 flex justify-end pr-4 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+              <span className="text-[10px] font-medium tracking-wide text-muted">
+                {mode === "ask" ? "ASK" : "BUILD"}
+                {model_name && ` • ${model_name}`}
+                {time_str && ` • ${time_str}`}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
     </MessagePrimitive.Root>
   );
+};
+
+// Custom Text component that wraps build mode JSON in code blocks
+const AssistantText: FC = () => {
+  const mode = useMessage(
+    (m) => m.metadata?.custom?.stemify_mode as "ask" | "build" | undefined,
+  );
+  const content = useMessage((m) => m.content as unknown as Array<{ type: string; text: string }> | undefined);
+  
+  // If in build mode and content looks like JSON, wrap it in a code block
+  if (mode === "build" && content && content.length > 0) {
+    const text = content[0]?.text || "";
+    // Check if content starts with { (JSON) and doesn't already have code block
+    if (text.trim().startsWith("{") && !text.includes("```")) {
+      // Render as JSON code block directly
+      return (
+        <div className="aui-md select-text">
+          <pre className="overflow-x-auto rounded-t-none rounded-b-lg border border-white/5 border-t-0 bg-white/3 p-3 text-xs leading-relaxed select-text">
+            <code className="language-json">{text}</code>
+          </pre>
+        </div>
+      );
+    }
+  }
+  
+  // Default: use regular MarkdownText
+  return <MarkdownText />;
 };
 
 const AssistantMessage: FC = () => {
@@ -401,6 +443,10 @@ const AssistantMessage: FC = () => {
 
   const show_meta = mode && (mode === "ask" || mode === "build");
   const is_loading = !content || content.length === 0 || (content.length === 1 && content[0].type === "text" && content[0].text.length === 0);
+  
+  // Check if this is a build mode JSON message
+  const is_build_json = mode === "build" && content && content.length > 0 && 
+    content[0]?.text?.trim().startsWith("{") && !content[0]?.text?.includes("```");
 
   return (
     <MessagePrimitive.Root
@@ -417,20 +463,26 @@ const AssistantMessage: FC = () => {
           <span className="text-xs text-zinc-500">Thinking...</span>
         </div>
       ) : (
-        <div className="group px-2">
-          <div className="w-full px-4 py-2 text-sm text-primary">
-            <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
-          </div>
-
-          {show_meta && (
-            <div className="mt-0.5 flex pl-4 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-              <span className="text-[10px] font-medium tracking-wide text-muted">
-                {mode === "ask" ? "ASK" : "BUILD"}
-                {model_name && ` • ${model_name}`}
-                {time_str && ` • ${time_str}`}
-              </span>
+        <div className="px-2">
+          <div className="group">
+            <div className="w-full px-4 pt-2 pb-0 text-sm text-primary">
+              {is_build_json ? (
+                <AssistantText />
+              ) : (
+                <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
+              )}
             </div>
-          )}
+
+            {show_meta && (
+              <div className="mt-0.5 flex px-4 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                <span className="text-[10px] font-medium tracking-wide text-muted">
+                  {mode === "ask" ? "ASK" : "BUILD"}
+                  {model_name && ` • ${model_name}`}
+                  {time_str && ` • ${time_str}`}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

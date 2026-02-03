@@ -20,7 +20,7 @@ function check_and_show_banner(): void {
         >
           OpenRouter
         </a>{" "}
-        API key. Your key is stored locally in your browser and never sent to our servers.
+        API key. It is stored locally in your browser and never leaves your device.
       </>,
       {
         title: "Welcome! Let's get you set up",

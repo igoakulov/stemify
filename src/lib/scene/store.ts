@@ -17,6 +17,7 @@ export type SavedScene = {
 
 export const MAX_SAVED_SCENES = 20;
 const STORAGE_KEY = "stemify.scenes.v1";
+const ACTIVE_SCENE_ID_KEY = "stemify.activeSceneId.v1";
 
 export function load_saved_scenes(): SavedScene[] {
   try {
@@ -53,4 +54,16 @@ export function delete_scene(scene_id: string): SavedScene[] {
   const next = existing.filter((s) => s.id !== scene_id);
   save_saved_scenes(next);
   return load_saved_scenes();
+}
+
+export function get_active_scene_id(): string | null {
+  return window.localStorage.getItem(ACTIVE_SCENE_ID_KEY);
+}
+
+export function set_active_scene_id(scene_id: string): void {
+  window.localStorage.setItem(ACTIVE_SCENE_ID_KEY, scene_id);
+}
+
+export function clear_active_scene_id(): void {
+  window.localStorage.removeItem(ACTIVE_SCENE_ID_KEY);
 }

@@ -108,7 +108,7 @@ function getCodeKey(code: string): string {
 }
 
 // Assistant-UI compatible CodeHeader component with expand/collapse
-const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
+export const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
   const { isCopied, copyToClipboard } = useCopyToClipboard();
   const key = code ? getCodeKey(code) : '';
   const [isCollapsed, setIsCollapsed] = useCollapseState(key);

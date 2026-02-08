@@ -13,8 +13,9 @@ import { useAui } from "@assistant-ui/store";
 import { ArrowDownIcon, ArrowUp, RotateCcwIcon, Square } from "lucide-react";
 import { useEffect, useRef, useState, type FC } from "react";
 
-import { MarkdownText } from "@/components/assistant-ui/markdown-text";
+import { MarkdownText, CodeHeader } from "@/components/assistant-ui/markdown-text";
 import { ChatStatusBanner } from "@/components/chat/ChatStatusBanner";
+import { RecentScenes } from "@/components/chat/RecentScenes";
 import { OpenRouterModelSelector } from "@/components/openrouter/OpenRouterModelSelector";
 import { Button } from "@/components/ui/button";
 import { KeyboardShortcut } from "@/components/ui/keyboard-shortcut";
@@ -33,7 +34,11 @@ const SCROLLBAR_STYLES = (
   `}</style>
 );
 
-export const Thread: FC = () => {
+export type ThreadProps = {
+  show_recent_scenes?: boolean;
+};
+
+export const Thread: FC<ThreadProps> = ({ show_recent_scenes }) => {
   const viewport_ref = useRef<HTMLDivElement>(null);
   useChatPrerequisites();
 
@@ -43,14 +48,16 @@ export const Thread: FC = () => {
       <ThreadPrimitive.Root className="relative flex h-full min-h-0 flex-col">
         <ThreadPrimitive.Viewport ref={viewport_ref} className="relative flex min-h-0 flex-1 flex-col overflow-y-scroll px-4 pt-4 chat-scroll-viewport">
           <AuiIf condition={({ thread }) => thread.isEmpty}>
-            <div className="mx-auto my-auto max-w-md text-center">
-              <div className="text-sm font-semibold text-secondary">
-                Ask a question
+            {!show_recent_scenes && (
+              <div className="mx-auto my-auto max-w-md text-center">
+                <div className="text-sm font-semibold text-secondary">
+                  Ask a question
+                </div>
+                <div className="mt-2 text-sm leading-6 text-tertiary">
+                  Ask for an explanation, or ask to update the visualization.
+                </div>
               </div>
-              <div className="mt-2 text-sm leading-6 text-tertiary">
-                Ask for an explanation, or ask to update the visualization.
-              </div>
-            </div>
+            )}
           </AuiIf>
 
           <ThreadPrimitive.Messages
@@ -60,6 +67,12 @@ export const Thread: FC = () => {
             }}
           />
         </ThreadPrimitive.Viewport>
+
+        {show_recent_scenes && (
+          <div className="w-full max-w-2xl mx-auto p-4">
+            <RecentScenes />
+          </div>
+        )}
 
         <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto flex w-full max-w-2xl flex-col gap-4 overflow-visible rounded-t-3xl bg-zinc-950/90 px-4 pb-4 pt-2 backdrop-blur">
           <ThreadScrollToBottom viewportRef={viewport_ref} />
@@ -408,14 +421,21 @@ const AssistantText: FC = () => {
   
   // If in build mode and content looks like JSON, wrap it in a code block
   if (mode === "build" && content && content.length > 0) {
-    const text = content[0]?.text || "";
-    // Check if content starts with { (JSON) and doesn't already have code block
-    if (text.trim().startsWith("{") && !text.includes("```")) {
-      // Render as JSON code block directly
+    const fullText = content[0]?.text || "";
+    
+    // Extract JSON code portion (between ```json and ``` fences)
+    const codeBlockMatch = fullText.match(/```json\n([\s\S]*?)\n```/);
+    const jsonText = codeBlockMatch ? codeBlockMatch[1].trim() : fullText.split(/\n\n/)[0].trim();
+    
+    // Check if this is JSON content
+    const isJson = fullText.includes("```json") || fullText.trim().startsWith("{");
+    
+    if (isJson) {
       return (
         <div className="aui-md select-text">
-          <pre className="overflow-x-auto rounded-t-none rounded-b-lg border border-white/5 border-t-0 bg-white/3 p-3 text-xs leading-relaxed select-text">
-            <code className="language-json">{text}</code>
+          <CodeHeader language="json" code={jsonText} />
+          <pre className="overflow-x-auto rounded-b-2xl border border-white/5 border-t-0 bg-white/3 p-3 text-xs leading-relaxed select-text">
+            <code className="language-json">{jsonText}</code>
           </pre>
         </div>
       );
@@ -442,18 +462,18 @@ const AssistantMessage: FC = () => {
     : null;
 
   const show_meta = mode && (mode === "ask" || mode === "build");
-  const is_loading = !content || content.length === 0 || (content.length === 1 && content[0].type === "text" && content[0].text.length === 0);
-  
-  // Check if this is a build mode JSON message
-  const is_build_json = mode === "build" && content && content.length > 0 && 
+
+  const is_build_json = mode === "build" && content && content.length > 0 &&
     content[0]?.text?.trim().startsWith("{") && !content[0]?.text?.includes("```");
+
+  const has_content = content && (content.length > 1 || (content.length === 1 && (content[0].type !== "text" || content[0].text.length > 0)));
 
   return (
     <MessagePrimitive.Root
       className="mx-auto w-full max-w-2xl pb-2"
       data-role="assistant"
     >
-      {is_loading ? (
+      {!has_content ? (
         <div className="flex items-center gap-1.5 py-1 pl-4">
           <div className="flex gap-1">
             <span className="h-1.5 w-1.5 rounded-full bg-zinc-500 animate-bounce" style={{ animationDelay: "0ms" }} />

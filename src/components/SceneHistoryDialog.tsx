@@ -19,6 +19,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -53,7 +54,6 @@ export type SceneHistoryDialogProps = {
 export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
   const [is_mounted, set_is_mounted] = useState(false);
   const [open, set_open] = useState(false);
-  const [confirm_new_open, set_confirm_new_open] = useState(false);
   const [scenes, set_scenes] = useState<SavedScene[]>([]);
   const [confirm_delete_id, set_confirm_delete_id] = useState<string | null>(
     null,
@@ -87,7 +87,7 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
     };
 
     const on_new = () => {
-      set_confirm_new_open(true);
+      window.dispatchEvent(new Event("stemify:confirm-new-scene"));
     };
 
     const on_scenes_changed = () => {
@@ -118,73 +118,79 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
   return (
     <>
       <Dialog open={open} onOpenChange={set_open}>
-        <DialogContent className="max-w-xl bg-white text-zinc-950">
+        <DialogContent className="max-w-xl bg-white text-zinc-950 overflow-hidden max-h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
+            <DialogDescription>
+              A list of your most recent scenes. Click on a scene to load it.
+            </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-2">
-            {scenes.map((s) => {
-              const chat_title = get_chat_title(s.id);
-              const display_title = chat_title || s.title;
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <div className="space-y-2 pr-2">
+              {scenes.map((s) => {
+                const chat_title = get_chat_title(s.id);
+                const display_title = chat_title || s.title;
 
-              return (
-                <div
-                  key={s.id}
-                  className="flex items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2"
-                >
+                return (
                   <div
-                    className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-900 cursor-pointer hover:text-zinc-700"
-                    onClick={() => {
-                      props.onLoadScene(s);
-                      set_open(false);
-                    }}
+                    key={s.id}
+                    className="flex items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 min-w-0 gap-2 overflow-hidden"
                   >
-                    {display_title}
-                  </div>
-
-                  <div className="flex items-center gap-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-zinc-500 hover:text-red-600"
-                      onClick={() => {
-                        set_confirm_delete_id(s.id);
-                      }}
-                      title="Delete scene"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-zinc-500 hover:text-zinc-900"
+                    <div
+                      className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-900 cursor-pointer hover:text-zinc-700"
+                      title={display_title}
                       onClick={() => {
                         props.onLoadScene(s);
                         set_open(false);
-                        window.dispatchEvent(
-                          new CustomEvent("stemify:scenes-changed", {
-                            detail: { activeId: s.id },
-                          }),
-                        );
                       }}
-                      title="Load scene"
                     >
-                      <ArrowRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
+                      {display_title}
+                    </div>
 
-            {!has_any ? (
-              <div className="rounded-md border border-dashed border-zinc-200 p-6 text-sm text-zinc-500">
-                No saved scenes yet.
-              </div>
-            ) : null}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-zinc-500 hover:text-red-600"
+                        onClick={() => {
+                          set_confirm_delete_id(s.id);
+                        }}
+                        title="Delete scene"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-zinc-500 hover:text-zinc-900"
+                        onClick={() => {
+                          props.onLoadScene(s);
+                          set_open(false);
+                          window.dispatchEvent(
+                            new CustomEvent("stemify:scenes-changed", {
+                              detail: { activeId: s.id },
+                            }),
+                          );
+                        }}
+                        title="Load scene"
+                      >
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {!has_any ? (
+                <div className="rounded-md border border-dashed border-zinc-200 p-6 text-sm text-zinc-500">
+                  No saved scenes yet.
+                </div>
+              ) : null}
+            </div>
           </div>
 
           <Separator className="my-2" />
@@ -193,7 +199,8 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
             <Button
               variant="outline"
               onClick={() => {
-                set_confirm_new_open(true);
+                set_open(false);
+                window.dispatchEvent(new Event("stemify:confirm-new-scene"));
               }}
             >
               New scene
@@ -202,47 +209,18 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={confirm_new_open} onOpenChange={set_confirm_new_open}>
-        <AlertDialogContent onKeyDown={make_confirm_dialog_key_handler(() => {
-          set_open(false);
-          window.dispatchEvent(new Event("stemify:confirm-new-scene"));
-          set_confirm_new_open(false);
-        })}>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Create new scene?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will save your current scene, with the conversation, and open
-              a new one.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel asChild>
-              <Button variant="outline" type="button">Cancel</Button>
-            </AlertDialogCancel>
-            <AlertDialogAction
-              autoFocus
-              onClick={() => {
-                set_open(false);
-                window.dispatchEvent(new Event("stemify:confirm-new-scene"));
-                set_confirm_new_open(false);
-              }}
-            >
-              Create
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
       <AlertDialog
         open={confirm_delete_id !== null}
         onOpenChange={() => set_confirm_delete_id(null)}
       >
-        <AlertDialogContent onKeyDown={make_confirm_dialog_key_handler(() => {
-          if (confirm_delete_id) {
-            confirm_delete(confirm_delete_id);
-          }
-          set_confirm_delete_id(null);
-        })}>
+        <AlertDialogContent
+          onKeyDown={make_confirm_dialog_key_handler(() => {
+            if (confirm_delete_id) {
+              confirm_delete(confirm_delete_id);
+            }
+            set_confirm_delete_id(null);
+          })}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>Delete scene?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -250,9 +228,11 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
               history.
             </AlertDialogDescription>
           </AlertDialogHeader>
-            <AlertDialogFooter>
+          <AlertDialogFooter>
             <AlertDialogCancel asChild>
-              <Button variant="outline" type="button">Cancel</Button>
+              <Button variant="outline" type="button">
+                Cancel
+              </Button>
             </AlertDialogCancel>
             <AlertDialogAction
               autoFocus

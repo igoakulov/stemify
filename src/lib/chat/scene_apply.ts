@@ -11,7 +11,9 @@ import {
 
 export function validate_scene_code(scene_code: string): { ok: boolean; error?: string } {
   const trimmed = scene_code.trim();
-  if (trimmed.length === 0) return { ok: false, error: "Scene code is empty." };
+  if (trimmed.length === 0) {
+    return { ok: false, error: "Scene code is empty." };
+  }
 
   // MVP: validate by executing against a minimal in-memory scene API.
   // We don't want to mutate the real viewport until we know it won't throw.

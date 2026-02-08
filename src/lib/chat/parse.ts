@@ -19,9 +19,46 @@ export type ParseResult =
       text: string;
     };
 
-export function parse_model_output(raw: string): ParseResult {
+function extract_json_from_markdown(raw: string): string | null {
+  // Look for JSON inside markdown code blocks
+  const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)\s*```/g;
+  let match;
+  
+  while ((match = codeBlockRegex.exec(raw)) !== null) {
+    const content = match[1].trim();
+    // Check if content looks like JSON
+    if (content.startsWith("{") && content.endsWith("}")) {
+      try {
+        // Validate it's valid JSON
+        JSON.parse(content);
+        return content;
+      } catch {
+        // Not valid JSON, continue searching
+      }
+    }
+  }
+  
+  return null;
+}
+
+export function parse_model_output(raw: string, mode?: "ask" | "build"): ParseResult {
   const trimmed = raw.trim();
   if (!trimmed) return { kind: "text", text: "" };
+
+  // In BUILD mode, first try to extract JSON from markdown code blocks
+  if (mode === "build") {
+    const jsonFromMarkdown = extract_json_from_markdown(raw);
+    if (jsonFromMarkdown) {
+      try {
+        return {
+          kind: "json",
+          payload: JSON.parse(jsonFromMarkdown) as ParsedScenePayload,
+        };
+      } catch {
+        // fall through to normal parsing
+      }
+    }
+  }
 
   // Fast path: starts like JSON
   if (trimmed.startsWith("{") && trimmed.endsWith("}")) {

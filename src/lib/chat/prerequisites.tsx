@@ -2,38 +2,18 @@
 
 import { useEffect } from "react";
 
-import { show_suggestion, clear_banner } from "@/lib/chat/banner";
+import { show_suggestion, clear_banner, BANNERS } from "@/lib/chat/banner";
 import { load_openrouter_api_key } from "@/lib/settings/storage";
 
 function check_and_show_banner(): void {
   const api_key = load_openrouter_api_key();
   
   if (!api_key) {
-    show_suggestion(
-      <>
-        To start chatting, add your{" "}
-        <a
-          href="https://openrouter.ai"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline hover:text-white"
-        >
-          OpenRouter
-        </a>{" "}
-        API key. It is stored locally in your browser and never leaves your device.
-      </>,
-      {
-        title: "Welcome! Let's get you set up",
-        actions: [
-          {
-            label: "Add API key",
-            onClick: () => {
-              window.dispatchEvent(new CustomEvent("stemify:open-settings"));
-            },
-          },
-        ],
-      }
-    );
+    const config = BANNERS.WELCOME_SETUP;
+    show_suggestion(config.message, {
+      title: config.title,
+      actions: config.actions,
+    });
   } else {
     clear_banner();
   }

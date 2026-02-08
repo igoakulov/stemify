@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { History, Plus, Settings, Pencil, Check, X, Copy } from "lucide-react";
 
 import { Thread } from "@/components/assistant-ui/thread";
@@ -8,14 +8,15 @@ import {
   ChatRuntimeProvider,
   append_to_assistant_message,
   create_message_id,
+  type ResolvedThread,
 } from "@/components/chat/ChatRuntimeProvider";
 import { Button } from "@/components/ui/button";
 import type { SavedScene } from "@/lib/scene/store";
-import { get_thread, set_thread_title } from "@/lib/chat/store";
+import { get_thread, set_thread_title, get_current_abort_controller, set_current_abort_controller } from "@/lib/chat/store";
 import { run_chat_turn } from "@/lib/chat/runner";
 import { clear_banner } from "@/lib/chat/banner";
 import { generate_title } from "@/lib/chat/title";
-import { upsert_scene } from "@/lib/scene/store";
+import { upsert_scene, save_saved_scenes, load_saved_scenes, set_active_scene_id } from "@/lib/scene/store";
 
 const format_chat_for_clipboard = (thread_id: string): string => {
   const snapshot = get_thread(thread_id);
@@ -56,31 +57,24 @@ const format_chat_for_clipboard = (thread_id: string): string => {
 };
 
 export type ChatPanelProps = {
-  active_scene: SavedScene;
+  active_scene: SavedScene | null;
   on_scene_title_change?: (new_title: string) => void;
 };
 
 export function ChatPanel(props: ChatPanelProps) {
-  const thread_id = props.active_scene.id;
+  const thread_id = props.active_scene?.id ?? null;
 
-  const abort_ref = useRef<AbortController | null>(null);
   const [is_editing_title, set_is_editing_title] = useState(false);
   const [edit_title_value, set_edit_title_value] = useState("");
   const [copied, set_copied] = useState(false);
 
   const current_title = useCallback(() => {
+    if (!thread_id) return "Untitled";
     const thread = get_thread(thread_id);
-    return thread.title ?? props.active_scene.title;
-  }, [props.active_scene.title, thread_id]);
+    return thread.title ?? props.active_scene?.title ?? "Untitled";
+  }, [props.active_scene?.title, thread_id]);
 
   const [display_title, set_display_title] = useState("");
-
-  useEffect(() => {
-    return () => {
-      abort_ref.current?.abort();
-      abort_ref.current = null;
-    };
-  }, []);
 
   useEffect(() => {
     const title = current_title();
@@ -88,39 +82,68 @@ export function ChatPanel(props: ChatPanelProps) {
     set_edit_title_value(title);
   }, [current_title, thread_id]);
 
-  const on_cancel = useCallback(async () => {
-    abort_ref.current?.abort();
-    abort_ref.current = null;
-  }, []);
-
   const on_first_assistant_response = useCallback(
-    async (options: { thread_id: string; first_user_message: string }) => {
+    async (options: { thread_id: string; first_user_message: string; scene: SavedScene }) => {
       const current = get_thread(options.thread_id);
       if (current.title) return;
 
       try {
         const title = await generate_title(options.first_user_message);
-        set_thread_title(options.thread_id, title);
-        set_display_title(title);
+        const recheck = get_thread(options.thread_id);
+        if (!recheck.title) {
+          set_thread_title(options.thread_id, title);
+          set_display_title(title);
+          upsert_scene({
+            ...options.scene,
+            title: title,
+            updatedAt: Date.now(),
+          });
+          window.dispatchEvent(new CustomEvent("stemify:scenes-changed", { detail: { activeId: options.scene.id } }));
+        }
       } catch {
-        // Title generation failed silently
       }
     },
     [],
   );
 
+  const on_resolve_thread = useCallback(async (): Promise<ResolvedThread> => {
+    if (props.active_scene) {
+      return { threadId: props.active_scene.id, scene: props.active_scene };
+    }
+
+    const now = Date.now();
+    const new_scene: SavedScene = {
+      id: `scene_${now}`,
+      title: "Untitled",
+      createdAt: now,
+      updatedAt: now,
+      sceneCode: "",
+      objects: [],
+    };
+
+    // Persist the new scene
+    const scenes = load_saved_scenes();
+    save_saved_scenes([new_scene, ...scenes]);
+    set_active_scene_id(new_scene.id);
+
+    // Notify AppShell of new scene
+    window.dispatchEvent(
+      new CustomEvent("stemify:scenes-changed", { detail: { activeId: new_scene.id } })
+    );
+
+    return { threadId: new_scene.id, scene: new_scene };
+  }, [props.active_scene]);
+
   const on_send_user_message = useCallback(
     async (options: {
       thread_id: string;
+      scene: SavedScene;
       user_text: string;
       mode: "ask" | "build";
       model_id: string | undefined;
       on_first_delta: (assistant_message_id: string) => void;
     }) => {
       clear_banner();
-      abort_ref.current?.abort();
-      const controller = new AbortController();
-      abort_ref.current = controller;
 
       let assistant_message_id: string | null = null;
 
@@ -132,7 +155,7 @@ export function ChatPanel(props: ChatPanelProps) {
 
         await run_chat_turn({
           thread_id: options.thread_id,
-          scene: props.active_scene,
+          scene: options.scene,
           history,
           user_text: options.user_text,
           mode: options.mode,
@@ -148,15 +171,13 @@ export function ChatPanel(props: ChatPanelProps) {
             });
             return assistant_message_id;
           },
-          signal: controller.signal,
+          signal: get_current_abort_controller()?.signal,
         });
       } finally {
-        if (abort_ref.current === controller) {
-          abort_ref.current = null;
-        }
+        set_current_abort_controller(null);
       }
     },
-    [props.active_scene],
+    [],
   );
 
   const start_editing_title = useCallback(() => {
@@ -171,12 +192,13 @@ export function ChatPanel(props: ChatPanelProps) {
 
   const save_title = useCallback(() => {
     const trimmed = edit_title_value.trim();
-    if (trimmed && trimmed !== display_title) {
+    if (trimmed && trimmed !== display_title && props.active_scene && thread_id) {
       set_thread_title(thread_id, trimmed);
       set_display_title(trimmed);
       upsert_scene({
         ...props.active_scene,
         title: trimmed,
+        updatedAt: Date.now(),
       });
       window.dispatchEvent(new CustomEvent("stemify:scenes-changed", { detail: { activeId: props.active_scene.id } }));
     }
@@ -186,7 +208,7 @@ export function ChatPanel(props: ChatPanelProps) {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center justify-between gap-2 border-b border-white/5 px-4 py-2">
-        {is_editing_title ? (
+        {props.active_scene && is_editing_title ? (
           <div className="flex items-center gap-1 flex-1 min-w-0">
             <input
               type="text"
@@ -223,7 +245,7 @@ export function ChatPanel(props: ChatPanelProps) {
               <X className="h-4 w-4" />
             </Button>
           </div>
-        ) : (
+        ) : props.active_scene ? (
           <>
             <div className="flex items-center gap-1 min-w-0 flex-1">
               <div
@@ -262,14 +284,58 @@ export function ChatPanel(props: ChatPanelProps) {
                 size="icon"
                 className="h-7 w-7 transition-all duration-200"
                 onClick={() => {
-                  const text = format_chat_for_clipboard(thread_id);
-                  navigator.clipboard.writeText(text);
-                  set_copied(true);
-                  setTimeout(() => set_copied(false), 1500);
+                  if (thread_id) {
+                    const text = format_chat_for_clipboard(thread_id);
+                    navigator.clipboard.writeText(text);
+                    set_copied(true);
+                    setTimeout(() => set_copied(false), 1500);
+                  }
                 }}
                 title="Copy conversation"
               >
                 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              </Button>
+              <Button
+                type="button"
+                variant="toolbar"
+                size="icon"
+                className="h-7 w-7 transition-all duration-200"
+                onClick={() => {
+                  window.dispatchEvent(new Event("stemify:open-history"));
+                }}
+                title="Scene history"
+              >
+                <History className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="toolbar"
+                size="icon"
+                className="h-7 w-7 transition-all duration-200"
+                onClick={() => {
+                  window.dispatchEvent(new Event("stemify:open-settings"));
+                }}
+                title="Settings"
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex-1" />
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="toolbar"
+                size="icon"
+                className="h-7 w-7 transition-all duration-200"
+                onClick={() => {
+                  window.dispatchEvent(new Event("stemify:new-scene"));
+                }}
+                title="New scene"
+              >
+                <Plus className="h-4 w-4" />
               </Button>
               <Button
                 type="button"
@@ -303,11 +369,11 @@ export function ChatPanel(props: ChatPanelProps) {
       <div className="min-h-0 flex-1">
         <ChatRuntimeProvider
           thread_id={thread_id}
+          on_resolve_thread={on_resolve_thread}
           on_send_user_message={on_send_user_message}
-          on_cancel={on_cancel}
           on_first_assistant_response={on_first_assistant_response}
         >
-          <Thread />
+          <Thread show_recent_scenes={!props.active_scene} />
         </ChatRuntimeProvider>
       </div>
     </div>

@@ -9,6 +9,16 @@ import {
 
 const threads = new Map<ChatThreadId, ChatThreadState>();
 
+let current_abort_controller: AbortController | null = null;
+
+export function get_current_abort_controller(): AbortController | null {
+  return current_abort_controller;
+}
+
+export function set_current_abort_controller(controller: AbortController | null): void {
+  current_abort_controller = controller;
+}
+
 export function ensure_thread(thread_id: ChatThreadId, mode: "ask" | "build", model: string): ChatThreadState {
   const existing = threads.get(thread_id);
   if (existing) return existing;
@@ -107,4 +117,17 @@ export function get_first_user_message(thread_id: ChatThreadId): string | null {
 export function has_assistant_responses(thread_id: ChatThreadId): boolean {
   const state = get_thread(thread_id);
   return state.messages.some((m) => m.role === "assistant");
+}
+
+export function migrate_thread(from_thread_id: ChatThreadId, to_thread_id: ChatThreadId): void {
+  const state = threads.get(from_thread_id);
+  if (!state) return;
+  
+  // Copy thread to new ID
+  threads.set(to_thread_id, { ...state });
+  save_chat(to_thread_id, state);
+  
+  // Clean up old draft thread
+  threads.delete(from_thread_id);
+  delete_chat(from_thread_id);
 }

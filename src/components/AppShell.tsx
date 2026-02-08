@@ -8,62 +8,74 @@ import { SceneViewport } from "@/components/SceneViewport";
 import { SceneToolbar } from "@/components/SceneToolbar";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { seed_starter_scenes_if_empty } from "@/lib/scene/seed";
+import { clear_banner } from "@/lib/chat/banner";
 import {
   load_saved_scenes,
-  save_saved_scenes,
+  get_active_scene_id,
+  set_active_scene_id,
+  clear_active_scene_id,
   type SavedScene,
 } from "@/lib/scene/store";
+import { get_current_abort_controller, set_current_abort_controller } from "@/lib/chat/store";
 
 export function AppShell() {
-  const [active_saved_scene, set_active_saved_scene] = useState<SavedScene | null>(null);
-  const [recent_scenes, set_recent_scenes] = useState<SavedScene[]>([]);
+  const [active_scene, set_active_scene] = useState<SavedScene | null>(null);
   const active_scene_id_ref = useRef<string | null>(null);
 
-  const refresh_from_storage = useCallback((active_id_override?: string) => {
-    const scenes = load_saved_scenes();
-    set_recent_scenes(scenes.slice(0, 5));
+    const refresh_from_storage = useCallback((active_id_override?: string) => {
+      const scenes = load_saved_scenes();
+      const local_active_id = get_active_scene_id();
 
-    const active_id = active_id_override ?? active_scene_id_ref.current;
-    if (!active_id) {
-      const next = scenes[0] ?? null;
-      active_scene_id_ref.current = next?.id ?? null;
-      set_active_saved_scene(next);
-      return;
-    }
+      // If override provided but localStorage doesn't have it,
+      // the scene was explicitly cleared - treat as zero state
+      if (active_id_override && active_id_override !== local_active_id) {
+        active_scene_id_ref.current = null;
+        set_active_scene(null);
+        return;
+      }
 
-    const still_exists = scenes.find((s) => s.id === active_id) ?? null;
-    const next = still_exists ?? scenes[0] ?? null;
-    active_scene_id_ref.current = next?.id ?? null;
-    set_active_saved_scene(next);
-  }, []);
+      const active_id = local_active_id ?? active_scene_id_ref.current;
+      if (!active_id) {
+        set_active_scene(null);
+        return;
+      }
+
+      const still_exists = scenes.find((s) => s.id === active_id) ?? null;
+      active_scene_id_ref.current = still_exists?.id ?? null;
+      set_active_scene(still_exists);
+    }, []);
+
   useEffect(() => {
     const raf = window.requestAnimationFrame(() => {
       seed_starter_scenes_if_empty();
+      // Restore previously active scene, or most recent if none
       const scenes = load_saved_scenes();
-      set_recent_scenes(scenes.slice(0, 5));
-      const initial = scenes[0] ?? null;
-      active_scene_id_ref.current = initial?.id ?? null;
-      set_active_saved_scene(initial);
+      if (scenes.length === 0) return;
+
+      const previous_active_id = get_active_scene_id();
+      const previous_active = scenes.find((s) => s.id === previous_active_id);
+
+      if (previous_active) {
+        active_scene_id_ref.current = previous_active.id;
+        set_active_scene(previous_active);
+      }
+      // If no active scene ID, stay at zero state (RecentScenes displayed)
     });
 
     const on_confirm_new = () => {
-      const now = Date.now();
-      const new_scene: SavedScene = {
-        id: `scene_${now}`,
-        title: "Untitled",
-        createdAt: now,
-        updatedAt: now,
-        sceneCode: "",
-        objects: [],
-      };
-
-      // Persist + make it the active scene.
-      const next = [new_scene, ...load_saved_scenes()];
-      save_saved_scenes(next);
-      active_scene_id_ref.current = new_scene.id;
-      window.dispatchEvent(
-        new CustomEvent("stemify:scenes-changed", { detail: { activeId: new_scene.id } }),
-      );
+      // Abort any in-flight request immediately
+      const controller = get_current_abort_controller();
+      controller?.abort();
+      set_current_abort_controller(null);
+      // Clear active scene ID first (before dispatching event)
+      clear_active_scene_id();
+      // Clear active scene to start fresh
+      // Scene will be created on first message
+      // Dispatch event for UI switch, then update refs
+      window.dispatchEvent(new CustomEvent("stemify:load-scene", { detail: { scene: null } }));
+      active_scene_id_ref.current = null;
+      set_active_scene(null);
+      clear_banner();
     };
 
     const on_scenes_changed = (event: Event) => {
@@ -71,13 +83,32 @@ export function AppShell() {
       refresh_from_storage(custom.detail?.activeId);
     };
 
+    const on_load_scene = (event: Event) => {
+      const custom = event as CustomEvent<{ scene: SavedScene | null }>;
+      const scene = custom.detail.scene;
+      if (scene === null) {
+        // Zero state - clear everything
+        active_scene_id_ref.current = null;
+        set_active_scene(null);
+        clear_active_scene_id();
+        clear_banner();
+      } else {
+        active_scene_id_ref.current = scene.id;
+        set_active_scene(scene);
+        set_active_scene_id(scene.id);
+        // Don't clear banner here - let SceneViewport validation show errors if any
+      }
+    };
+
     window.addEventListener("stemify:confirm-new-scene", on_confirm_new);
     window.addEventListener("stemify:scenes-changed", on_scenes_changed);
+    window.addEventListener("stemify:load-scene", on_load_scene);
 
     return () => {
       window.cancelAnimationFrame(raf);
       window.removeEventListener("stemify:confirm-new-scene", on_confirm_new);
       window.removeEventListener("stemify:scenes-changed", on_scenes_changed);
+      window.removeEventListener("stemify:load-scene", on_load_scene);
     };
   }, [refresh_from_storage]);
 
@@ -87,56 +118,29 @@ export function AppShell() {
           <section className="relative h-full overflow-hidden">
             <div className="h-full flex flex-col">
               <div className="relative flex-1 min-h-0">
-                 <SceneViewport sceneCode={active_saved_scene?.sceneCode ?? ""} />
-                 <SceneToolbar
-                   onResetCamera={() => window.dispatchEvent(new Event("stemify:camera-reset"))}
-                 />
-               </div>
-           </div>
-           <SceneHistoryDialog
-             onLoadScene={(scene) => {
-               active_scene_id_ref.current = scene.id;
-               refresh_from_storage(scene.id);
-             }}
-           />
-           <SettingsDialog />
-         </section>
-
-        <aside className="flex h-full flex-col overflow-hidden">
-          {active_saved_scene ? (
-            <ChatPanel active_scene={active_saved_scene} />
-          ) : (
-            <div className="flex-1 overflow-auto p-4">
-              <div className="mx-auto max-w-md pt-10">
-                <div className="text-sm font-medium text-primary">Recent scenes</div>
-                <div className="mt-6 space-y-2">
-                  {recent_scenes.map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                       className="w-full rounded-lg border border-white/5 px-3 py-2 text-left text-sm text-secondary hover:border-white/10"
-                      onClick={() => {
-                        active_scene_id_ref.current = s.id;
-                        set_active_saved_scene(s);
-                      }}
-                    >
-                      {s.title}
-                    </button>
-                  ))}
+                  <SceneViewport key={active_scene?.id} sceneCode={active_scene?.sceneCode ?? ""} sceneId={active_scene?.id ?? ""} />
+                  <SceneToolbar
+                    onResetCamera={() => window.dispatchEvent(new Event("stemify:camera-reset"))}
+                    onGoHome={() => {
+                      window.dispatchEvent(new Event("stemify:confirm-new-scene"));
+                    }}
+                  />
                 </div>
-                <button
-                  type="button"
-                  className="mt-3 text-xs text-secondary hover:text-white"
-                  onClick={() => {
-                    window.dispatchEvent(new Event("stemify:open-history"));
-                  }}
-                >
-                  Show all
-                </button>
-              </div>
             </div>
-          )}
-        </aside>
+            <SceneHistoryDialog
+              onLoadScene={(scene) => {
+                active_scene_id_ref.current = scene.id;
+                set_active_scene_id(scene.id);
+                refresh_from_storage(scene.id);
+                // Don't clear banner here - let SceneViewport validation show errors if any
+              }}
+            />
+            <SettingsDialog />
+          </section>
+
+          <aside className="flex h-full flex-col overflow-hidden">
+            <ChatPanel active_scene={active_scene} />
+         </aside>
       </div>
     </div>
   );

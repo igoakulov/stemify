@@ -6,11 +6,13 @@ import { cn } from "@/lib/utils";
 
 type SceneToolbarProps = {
   onResetCamera: () => void;
+  onGoHome?: () => void;
   className?: string;
 };
 
 export const SceneToolbar: FC<SceneToolbarProps> = ({
   onResetCamera,
+  onGoHome,
   className,
 }) => {
   return (
@@ -23,9 +25,13 @@ export const SceneToolbar: FC<SceneToolbarProps> = ({
       {/* Main toolbar - transparent background */}
       <div className="flex items-center gap-1 rounded-outer p-2">
         {/* Stemify logo */}
-        <span className="text-sm font-semibold text-white/80 tracking-tight px-1 select-none">
+        <button
+          type="button"
+          onClick={onGoHome}
+          className="text-sm font-semibold text-white/80 tracking-tight px-1 select-none hover:text-white transition-colors cursor-pointer"
+        >
           Stemify
-        </span>
+        </button>
 
         <div className="w-px h-4 bg-white/10 mx-1" />
 

@@ -15,7 +15,7 @@ import {
 } from "@/lib/chat/parse";
 import { validate_scene_code } from "@/lib/chat/scene_apply";
 import { get_thread, replace_message } from "@/lib/chat/store";
-import { show_error, show_warning } from "@/lib/chat/banner";
+import { show_error, show_warning, BANNERS } from "@/lib/chat/banner";
 
 export type RunOptions = {
   thread_id: ChatThreadId;
@@ -24,37 +24,17 @@ export type RunOptions = {
   user_text: string;
   mode: "ask" | "build";
   on_delta: (delta: string) => string | void;
-  signal: AbortSignal;
+  signal?: AbortSignal;
 };
 
 export async function run_chat_turn(options: RunOptions): Promise<void> {
   const api_key = load_openrouter_api_key();
   if (!api_key) {
-    show_error(
-      <>
-        Please add your{" "}
-        <a
-          href="https://openrouter.ai"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline hover:text-white"
-        >
-          OpenRouter
-        </a>{" "}
-        API key in Settings to send messages.
-      </>,
-      {
-        title: "API Key Needed",
-        actions: [
-          {
-            label: "Add API key",
-            onClick: () => {
-              window.dispatchEvent(new CustomEvent("stemify:open-settings"));
-            },
-          },
-        ],
-      }
-    );
+    const config = BANNERS.API_KEY_NEEDED;
+    show_error(config.message, {
+      title: config.title,
+      actions: config.actions,
+    });
     throw new Error("Missing OpenRouter API key. Add it in Settings.");
   }
 
@@ -91,13 +71,14 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
     if (error instanceof Error && error.name === "AbortError") {
       return;
     }
-    show_error(`Failed to get response from OpenRouter: ${error_message}`, {
-      title: "OpenRouter Error",
+    const config = BANNERS.OPENROUTER_ERROR(error_message);
+    show_error(config.message, {
+      title: config.title,
     });
     throw error;
   }
 
-  const parsed = parse_model_output(raw);
+  const parsed = parse_model_output(raw, options.mode);
 
   if (options.mode === "ask") {
     // In ASK mode, we never attempt to parse/apply a scene.
@@ -105,43 +86,21 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
   }
 
   if (parsed.kind === "text") {
-    show_warning("Assistant's response has no scene code, nothing to BUILD ;(", {
-      title: "Nothing to BUILD",
-      actions: [
-        {
-          label: "Try again",
-          onClick: () => {},
-        },
-      ],
+    const config = BANNERS.NOTHING_TO_BUILD;
+    show_warning(config.message, {
+      title: config.title,
+      actions: config.actions,
     });
     throw new Error("Build mode expected JSON but received plain text.");
   }
 
   const scene_code = get_scene_code(parsed.payload);
   if (!scene_code) {
-    show_warning("Assistant's response has no scene code, nothing to BUILD ;(", {
-      title: "Nothing to BUILD",
-      actions: [
-        {
-          label: "Try again",
-          onClick: () => {},
-        },
-      ],
-    });
     throw new Error("Model returned JSON but no valid scene.sceneCode.");
   }
 
   const validation = validate_scene_code(scene_code);
   if (!validation.ok) {
-    show_error("Assistant's code for the scene is invalid. Try making your prompt more clear.", {
-      title: "Scene Code Issue",
-      actions: [
-        {
-          label: "Edit prompt",
-          onClick: () => {},
-        },
-      ],
-    });
     throw new Error(`Invalid scene code: ${validation.error ?? "Unknown error"}`);
   }
 

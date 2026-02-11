@@ -41,7 +41,9 @@ export function SceneViewport(props: SceneViewportProps) {
 
     window.addEventListener("stemify:camera-reset", on_reset);
 
-    const grid = new THREE.GridHelper(10, 10);
+    // Large ground grid: 20x20 units with 0.5 unit spacing
+    // scene.setGrid(size) can be called to change grid spacing
+    const grid = new THREE.GridHelper(20, 40);
     grid.material = runtime.materials.grid_line;
     runtime.scene.add(grid);
 

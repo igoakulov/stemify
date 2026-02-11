@@ -7,6 +7,7 @@ export function seed_starter_scenes_if_empty(): void {
   // Fresh install
   if (existing.length === 0) {
     save_saved_scenes(get_starter_scenes());
+    window.dispatchEvent(new Event("stemify:scenes-changed"));
     return;
   }
 
@@ -42,19 +43,8 @@ export function seed_starter_scenes_if_empty(): void {
     return s;
   });
 
-  // If a starter scene is missing entirely, add it as an old scene so it doesn't disrupt recents.
-  for (const starter of starters) {
-    if (merged.some((s) => s.id === starter.id)) continue;
-
-    changed = true;
-    merged.push({
-      ...starter,
-      createdAt: min_created_at - 1,
-      updatedAt: min_updated_at - 1,
-    });
-  }
-
   if (changed) {
     save_saved_scenes(merged);
+    window.dispatchEvent(new Event("stemify:scenes-changed"));
   }
 }

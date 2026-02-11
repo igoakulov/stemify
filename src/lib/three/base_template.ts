@@ -95,6 +95,7 @@ export function create_three_base_template(
 
     materials.mesh_default.dispose();
     materials.mesh_accent.dispose();
+    materials.line_default.dispose();
     materials.grid_line.dispose();
   };
 

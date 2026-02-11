@@ -28,6 +28,10 @@ export class ObjectRegistry {
     return this._objects;
   }
 
+  get_mesh(id: string): THREE.Object3D | undefined {
+    return this._meshes_by_id.get(id);
+  }
+
   clear(): void {
     this._objects = [];
     this._meshes_by_id.clear();

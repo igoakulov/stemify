@@ -51,19 +51,6 @@ export function RecentScenes() {
     window.dispatchEvent(new Event("stemify:open-history"));
   };
 
-  if (scenes.length === 0) {
-    return (
-      <div className="mx-auto max-w-md text-center">
-        <div className="text-sm font-semibold text-white/60">
-          No scenes yet
-        </div>
-        <div className="mt-2 text-sm leading-6 text-white/40">
-          Start a conversation to create your first scene
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="w-full min-w-0">
       <div className="space-y-1">

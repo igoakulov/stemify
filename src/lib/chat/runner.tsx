@@ -14,6 +14,7 @@ import {
   parse_model_output,
 } from "@/lib/chat/parse";
 import { validate_scene_code } from "@/lib/chat/scene_apply";
+import { validate_llm_response } from "@/lib/scene/validation";
 import { get_thread, replace_message } from "@/lib/chat/store";
 import { show_error, show_warning, BANNERS } from "@/lib/chat/banner";
 
@@ -39,10 +40,13 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
   }
 
   const system_prompt = await load_effective_prompt_md("start");
+  const api_prompt = await load_effective_prompt_md("api");
   const mode_prompt = await load_effective_prompt_md(options.mode);
 
+  const combined_system_prompt = `${system_prompt}\n\n---\n\n${api_prompt}`;
+
   const messages: OpenRouterChatMessage[] = [
-    { role: "system", content: system_prompt },
+    { role: "system", content: combined_system_prompt },
     { role: "system", content: mode_prompt },
     ...options.history.map((m) => ({ role: m.role, content: m.content })),
     { role: "user", content: options.user_text },
@@ -99,9 +103,35 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
     throw new Error("Model returned JSON but no valid scene.sceneCode.");
   }
 
+  // Stage 1: Validate LLM response structure and content
+  const llm_validation = validate_llm_response(parsed.payload);
+  if (!llm_validation.valid) {
+    const config = BANNERS.INVALID_SCENE_CODE;
+    show_error(config.message, {
+      title: config.title,
+      actions: config.actions,
+    });
+    throw new Error(`LLM response validation failed: ${llm_validation.error ?? "Unknown error"}`);
+  }
+
+  // Stage 2: Validate scene code can execute
   const validation = validate_scene_code(scene_code);
   if (!validation.ok) {
+    const config = BANNERS.INVALID_SCENE_CODE;
+    show_error(config.message, {
+      title: config.title,
+      actions: config.actions,
+    });
     throw new Error(`Invalid scene code: ${validation.error ?? "Unknown error"}`);
+  }
+
+  // Show performance warnings if any
+  if (llm_validation.warnings && llm_validation.warnings.length > 0) {
+    const config = BANNERS.PERFORMANCE_WARNING(llm_validation.warnings.join("; "));
+    show_warning(config.message, {
+      title: config.title,
+      actions: config.actions,
+    });
   }
 
   // Apply scene.

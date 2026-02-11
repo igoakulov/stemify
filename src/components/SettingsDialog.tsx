@@ -40,6 +40,10 @@ const PROMPT_INFO: Record<PromptId, { name: string; description: string }> = {
     name: "Generate Title",
     description: "Sent to auto-generate scene title in the background",
   },
+  api: {
+    name: "API Reference",
+    description: "Scene API documentation for the Assistant model",
+  },
 };
 
 export function SettingsDialog() {
@@ -77,10 +81,11 @@ export function SettingsDialog() {
       ask: "",
       build: "",
       generate_title: "",
+      api: "",
     },
   );
   const [prompt_errors, set_prompt_errors] = useState<Record<PromptId, string>>(
-    { start: "", ask: "", build: "", generate_title: "" },
+    { start: "", ask: "", build: "", generate_title: "", api: "" },
   );
 
   useEffect(() => {
@@ -92,6 +97,7 @@ export function SettingsDialog() {
         "ask",
         "build",
         "generate_title",
+        "api",
       ] as PromptId[]) {
         const override = load_prompt_override(pid);
         if (override !== null) {
@@ -221,22 +227,22 @@ export function SettingsDialog() {
             <div className="text-sm font-medium">System prompts</div>
 
             <div className="flex gap-1 border-b border-zinc-200 pb-1">
-              {(["start", "ask", "build", "generate_title"] as PromptId[]).map(
-                (pid) => (
-                  <button
-                    key={pid}
-                    type="button"
-                    onClick={() => set_active_prompt(pid)}
-                    className={`px-3 py-1.5 text-xs transition-colors ${
-                      active_prompt === pid
-                        ? "text-zinc-950 font-medium underline underline-offset-4"
-                        : "text-zinc-500 hover:text-zinc-700"
-                    }`}
-                  >
-                    {PROMPT_INFO[pid].name}
-                  </button>
-                ),
-              )}
+              {(
+                ["start", "ask", "build", "generate_title", "api"] as PromptId[]
+              ).map((pid) => (
+                <button
+                  key={pid}
+                  type="button"
+                  onClick={() => set_active_prompt(pid)}
+                  className={`px-3 py-1.5 text-xs transition-colors ${
+                    active_prompt === pid
+                      ? "text-zinc-950 font-medium underline underline-offset-4"
+                      : "text-zinc-500 hover:text-zinc-700"
+                  }`}
+                >
+                  {PROMPT_INFO[pid].name}
+                </button>
+              ))}
             </div>
 
             <div className="space-y-2">

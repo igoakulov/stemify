@@ -92,6 +92,7 @@ export const BANNERS: {
   OPENROUTER_ERROR: (errorMessage: string) => BannerConfig;
   NOTHING_TO_BUILD: BannerConfig;
   INVALID_SCENE_CODE: BannerConfig;
+  PERFORMANCE_WARNING: (details: string) => BannerConfig;
   WELCOME_SETUP: BannerConfig;
   GENERIC_ERROR: (message: string) => BannerConfig;
 } = {
@@ -137,6 +138,12 @@ export const BANNERS: {
     title: "Scene Code Issue",
     actions: [{ label: "Try again", onClick: () => {} }],
   },
+
+  PERFORMANCE_WARNING: (details: string) => ({
+    message: `Scene performance warning: ${details}`,
+    title: "Performance",
+    dismissable: true,
+  }),
 
   WELCOME_SETUP: {
     message: (

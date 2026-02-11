@@ -25,8 +25,10 @@ import { Separator } from "@/components/ui/separator";
 import {
   delete_scene,
   load_saved_scenes,
+  save_saved_scenes,
   type SavedScene,
 } from "@/lib/scene/store";
+import { get_starter_scenes } from "@/lib/scene/starter_scenes";
 import { get_thread, remove_thread } from "@/lib/chat/store";
 
 function make_confirm_dialog_key_handler(
@@ -75,15 +77,39 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
     window.dispatchEvent(new CustomEvent("stemify:scenes-changed"));
   };
 
+  const restore_starter_scenes = () => {
+    const existing = load_saved_scenes();
+    const starters = get_starter_scenes();
+
+    const missing = starters.filter((s) => !existing.some((e) => e.id === s.id));
+
+    if (missing.length === 0) return;
+
+    const merged = [...existing, ...missing];
+    save_saved_scenes(merged);
+    refresh();
+    window.dispatchEvent(new CustomEvent("stemify:scenes-changed"));
+  };
+
+  const [has_missing_starters, set_has_missing_starters] = useState(false);
+
+  const check_missing_starters = () => {
+    const existing = load_saved_scenes();
+    const starters = get_starter_scenes();
+    set_has_missing_starters(starters.some((s) => !existing.some((e) => e.id === s.id)));
+  };
+
   useEffect(() => {
     const raf = window.requestAnimationFrame(() => {
       set_is_mounted(true);
       refresh();
+      check_missing_starters();
     });
 
     const on_open = () => {
       set_open(true);
       refresh();
+      check_missing_starters();
     };
 
     const on_new = () => {
@@ -92,6 +118,7 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
 
     const on_scenes_changed = () => {
       refresh();
+      check_missing_starters();
     };
 
     window.addEventListener("stemify:open-history", on_open);
@@ -195,7 +222,16 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
 
           <Separator className="my-2" />
 
-          <div className="flex justify-end">
+          <div className="flex justify-between items-center">
+            {has_missing_starters && (
+              <Button
+                variant="ghost"
+                onClick={restore_starter_scenes}
+              >
+                Restore starter scenes
+              </Button>
+            )}
+            <div className="flex-1" />
             <Button
               variant="outline"
               onClick={() => {

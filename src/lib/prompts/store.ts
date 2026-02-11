@@ -1,4 +1,4 @@
-export type PromptId = "start" | "ask" | "build" | "generate_title";
+export type PromptId = "start" | "ask" | "build" | "generate_title" | "api";
 
 const PROMPT_OVERRIDES_KEY = "stemify.prompts.overrides.v1";
 

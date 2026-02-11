@@ -19,6 +19,7 @@ export const STYLE_COLORS = {
 export type StyleMaterials = {
   mesh_default: THREE.MeshStandardMaterial;
   mesh_accent: THREE.MeshStandardMaterial;
+  line_default: THREE.LineBasicMaterial;
   grid_line: THREE.LineBasicMaterial;
 };
 
@@ -35,11 +36,16 @@ export function create_style_materials(): StyleMaterials {
     metalness: 0.05,
   });
 
+  const line_default = new THREE.LineBasicMaterial({
+    color: STYLE_COLORS.neutral_text,
+    linewidth: 2,
+  });
+
   const grid_line = new THREE.LineBasicMaterial({
     color: STYLE_COLORS.neutral_text,
     transparent: true,
     opacity: 0.08,
   });
 
-  return { mesh_default, mesh_accent, grid_line };
+  return { mesh_default, mesh_accent, line_default, grid_line };
 }

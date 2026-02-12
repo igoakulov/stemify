@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 
 import { create_three_base_template, type ThreeBaseTemplate } from "@/lib/three/base_template";
-import { create_scene_api } from "@/lib/scene/scene_api";
+import { create_scene_api, create_default_grid_state, type GridState } from "@/lib/scene/scene_api";
 import { ObjectRegistry } from "@/lib/scene/object_registry";
 import { execute_scene_code } from "@/lib/scene/execute_scene_code";
 import { validate_scene_code } from "@/lib/chat/scene_apply";
@@ -18,6 +18,8 @@ import {
 export type SceneViewportProps = {
   sceneCode: string;
   sceneId: string;
+  gridSnap?: boolean;
+  onGridChange?: (enabled: boolean) => void;
 };
 
 export function SceneViewport(props: SceneViewportProps) {
@@ -25,7 +27,10 @@ export function SceneViewport(props: SceneViewportProps) {
   const label_container_ref = useRef<HTMLDivElement | null>(null);
   const runtime_ref = useRef<ThreeBaseTemplate | null>(null);
   const raf_ref = useRef<number | null>(null);
+  const grid_state_ref = useRef<GridState | null>(null);
+  const prev_grid_snap_ref = useRef<boolean | undefined>(undefined);
 
+  // Main scene setup and execution effect
   useEffect(() => {
     const canvas = canvas_ref.current;
     const label_container = label_container_ref.current;
@@ -42,7 +47,6 @@ export function SceneViewport(props: SceneViewportProps) {
     window.addEventListener("stemify:camera-reset", on_reset);
 
     // Large ground grid: 20x20 units with 0.5 unit spacing
-    // scene.setGrid(size) can be called to change grid spacing
     const grid = new THREE.GridHelper(20, 40);
     grid.material = runtime.materials.grid_line;
     runtime.scene.add(grid);
@@ -52,8 +56,13 @@ export function SceneViewport(props: SceneViewportProps) {
       runtime.root.remove(runtime.root.children[0]);
     }
 
+    // Initialize grid state
+    const grid_state = create_default_grid_state();
+    grid_state.enabled = props.gridSnap ?? true;
+    grid_state_ref.current = grid_state;
+
     const registry = new ObjectRegistry();
-    const scene_api = create_scene_api({ template: runtime, registry });
+    const scene_api = create_scene_api({ template: runtime, registry, gridConfig: grid_state });
 
     // Start render loop unconditionally - grid/template should always be visible
     const loop = () => {
@@ -64,6 +73,20 @@ export function SceneViewport(props: SceneViewportProps) {
       raf_ref.current = window.requestAnimationFrame(loop);
     };
     raf_ref.current = window.requestAnimationFrame(loop);
+
+    // Execute scene code function
+    const execute_scene = (code: string) => {
+      const validation = validate_scene_code(code);
+      if (!validation.ok) {
+        const config = BANNERS.INVALID_SCENE_CODE;
+        show_error(config.message, {
+          title: config.title,
+          actions: config.actions,
+        });
+      } else {
+        execute_scene_code(code, scene_api);
+      }
+    };
 
     // Attempt to execute scene code (in order of priority):
     // 1. If sceneCode is provided, execute it
@@ -146,16 +169,7 @@ export function SceneViewport(props: SceneViewportProps) {
 
     // Execute scene code if available
     if (code_to_execute && code_to_execute.trim().length > 0) {
-      const validation = validate_scene_code(code_to_execute);
-      if (!validation.ok) {
-        const config = BANNERS.INVALID_SCENE_CODE;
-        show_error(config.message, {
-          title: config.title,
-          actions: config.actions,
-        });
-      } else {
-        execute_scene_code(code_to_execute, scene_api);
-      }
+      execute_scene(code_to_execute);
     }
 
     return () => {
@@ -169,6 +183,40 @@ export function SceneViewport(props: SceneViewportProps) {
       runtime_ref.current = null;
     };
   }, [props.sceneCode, props.sceneId]);
+
+  // Handle grid snap toggle
+  useEffect(() => {
+    if (props.gridSnap === prev_grid_snap_ref.current) return;
+    prev_grid_snap_ref.current = props.gridSnap;
+
+    if (!grid_state_ref.current) return;
+
+    const new_enabled = props.gridSnap ?? true;
+    if (grid_state_ref.current.enabled !== new_enabled) {
+      grid_state_ref.current.enabled = new_enabled;
+      props.onGridChange?.(new_enabled);
+      
+      // Re-execute scene code with new grid settings
+      if (props.sceneCode && props.sceneCode.trim().length > 0 && runtime_ref.current) {
+        const registry = new ObjectRegistry();
+        const scene_api = create_scene_api({ 
+          template: runtime_ref.current, 
+          registry, 
+          gridConfig: grid_state_ref.current 
+        });
+        
+        // Clear previous scene content
+        while (runtime_ref.current.root.children.length > 0) {
+          runtime_ref.current.root.remove(runtime_ref.current.root.children[0]);
+        }
+        
+        const validation = validate_scene_code(props.sceneCode);
+        if (validation.ok) {
+          execute_scene_code(props.sceneCode, scene_api);
+        }
+      }
+    }
+  }, [props.gridSnap, props.sceneCode, props.onGridChange]);
 
   return (
     <div

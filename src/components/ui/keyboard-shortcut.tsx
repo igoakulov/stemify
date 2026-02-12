@@ -152,7 +152,7 @@ export const KeyboardShortcut: FC<KeyboardShortcutProps> = ({
   
   // Active state styles - hover colors + scale
   const activeStyles = isVisuallyActive 
-    ? "bg-white/10 text-white/80 border-white/10 scale-95" 
+    ? "bg-white/20 text-white/80 border-white/10 scale-95" 
     : "bg-white/5 text-white/50 border-white/5"
 
   if (asChild) {

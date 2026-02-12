@@ -11,6 +11,8 @@ const PROMPT_URLS: Record<PromptId, string> = {
   build: "/prompts/build.md",
   generate_title: "/prompts/generate_title.md",
   api: "/prompts/api.md",
+  current_scene: "/prompts/current_scene.md",
+  invalid_scene: "/prompts/invalid_scene.md",
 };
 
 export async function load_default_prompt_md(prompt_id: PromptId): Promise<string> {

@@ -26,7 +26,6 @@ export type AddLineConfig = {
   };
   thickness?: number;
   arrow?: "none" | "start" | "end" | "both";
-  slice?: { start: number; end: number };
   rotation?: { axis: Vec3; angle: number };
   color?: string;
   opacity?: number;
@@ -69,6 +68,7 @@ export type AddCylinderConfig = {
   id: string;
   points: Vec3[];
   radius: number[];
+  slice?: { start: number; end: number };
   color?: string;
   opacity?: number;
 };

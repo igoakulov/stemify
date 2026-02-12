@@ -149,14 +149,11 @@ export function ChatPanel(props: ChatPanelProps) {
 
       try {
         const snapshot = get_thread(options.thread_id);
-        const history = snapshot.messages
-          .filter((m) => m.role === "user" || m.role === "assistant")
-          .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
 
         await run_chat_turn({
           thread_id: options.thread_id,
           scene: options.scene,
-          history,
+          history: snapshot.messages,
           user_text: options.user_text,
           mode: options.mode,
           on_delta: (delta) => {

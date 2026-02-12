@@ -7,7 +7,6 @@ import { SettingsDialog } from "@/components/SettingsDialog";
 import { SceneViewport } from "@/components/SceneViewport";
 import { SceneToolbar } from "@/components/SceneToolbar";
 import { ChatPanel } from "@/components/chat/ChatPanel";
-import { seed_starter_scenes_if_empty } from "@/lib/scene/seed";
 import { clear_banner } from "@/lib/chat/banner";
 import {
   load_saved_scenes,
@@ -15,11 +14,13 @@ import {
   set_active_scene_id,
   clear_active_scene_id,
   type SavedScene,
+  update_scene_grid,
 } from "@/lib/scene/store";
 import { get_current_abort_controller, set_current_abort_controller } from "@/lib/chat/store";
 
 export function AppShell() {
   const [active_scene, set_active_scene] = useState<SavedScene | null>(null);
+  const [grid_snap, set_grid_snap] = useState(true);
   const active_scene_id_ref = useRef<string | null>(null);
 
     const refresh_from_storage = useCallback((active_id_override?: string) => {
@@ -43,11 +44,11 @@ export function AppShell() {
       const still_exists = scenes.find((s) => s.id === active_id) ?? null;
       active_scene_id_ref.current = still_exists?.id ?? null;
       set_active_scene(still_exists);
+      set_grid_snap(still_exists?.grid?.enabled ?? true);
     }, []);
 
   useEffect(() => {
     const raf = window.requestAnimationFrame(() => {
-      seed_starter_scenes_if_empty();
       // Restore previously active scene, or most recent if none
       const scenes = load_saved_scenes();
       if (scenes.length === 0) return;
@@ -58,6 +59,7 @@ export function AppShell() {
       if (previous_active) {
         active_scene_id_ref.current = previous_active.id;
         set_active_scene(previous_active);
+        set_grid_snap(previous_active.grid?.enabled ?? true);
       }
       // If no active scene ID, stay at zero state (RecentScenes displayed)
     });
@@ -90,13 +92,16 @@ export function AppShell() {
         // Zero state - clear everything
         active_scene_id_ref.current = null;
         set_active_scene(null);
+        set_grid_snap(true);
         clear_active_scene_id();
         clear_banner();
       } else {
         active_scene_id_ref.current = scene.id;
         set_active_scene(scene);
+        set_grid_snap(scene.grid?.enabled ?? true);
         set_active_scene_id(scene.id);
-        // Don't clear banner here - let SceneViewport validation show errors if any
+        // Clear dismissable banners when switching to a new scene
+        clear_banner();
       }
     };
 
@@ -118,21 +123,30 @@ export function AppShell() {
           <section className="relative h-full overflow-hidden">
             <div className="h-full flex flex-col">
               <div className="relative flex-1 min-h-0">
-                  <SceneViewport key={active_scene?.id} sceneCode={active_scene?.sceneCode ?? ""} sceneId={active_scene?.id ?? ""} />
+                  <SceneViewport 
+                    key={active_scene?.id} 
+                    sceneCode={active_scene?.sceneCode ?? ""} 
+                    sceneId={active_scene?.id ?? ""}
+                    gridSnap={grid_snap}
+                  />
                   <SceneToolbar
                     onResetCamera={() => window.dispatchEvent(new Event("stemify:camera-reset"))}
                     onGoHome={() => {
                       window.dispatchEvent(new Event("stemify:confirm-new-scene"));
+                    }}
+                    gridSnap={grid_snap}
+                    onGridChange={(enabled) => {
+                      set_grid_snap(enabled);
+                      if (active_scene?.id) {
+                        update_scene_grid(active_scene.id, { enabled });
+                      }
                     }}
                   />
                 </div>
             </div>
             <SceneHistoryDialog
               onLoadScene={(scene) => {
-                active_scene_id_ref.current = scene.id;
-                set_active_scene_id(scene.id);
-                refresh_from_storage(scene.id);
-                // Don't clear banner here - let SceneViewport validation show errors if any
+                window.dispatchEvent(new CustomEvent("stemify:load-scene", { detail: { scene } }));
               }}
             />
             <SettingsDialog />

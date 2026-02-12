@@ -51,6 +51,10 @@ export function RecentScenes() {
     window.dispatchEvent(new Event("stemify:open-history"));
   };
 
+  if (scenes.length === 0) {
+    return null;
+  }
+
   return (
     <div className="w-full min-w-0">
       <div className="space-y-1">

@@ -70,18 +70,7 @@ scene.addLine({
   color: "#F2C14E"
 })
 
-// Half-pipe (tube with slice)
-scene.addLine({
-  id: "halfpipe",
-  points: [{ x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }],
-  thickness: 2,
-  slice: { start: 0, end: 180 },
-  rotation: { axis: { x: 0, y: 0, z: 1 }, angle: 0 },
-  color: "#B07CFF"
-})
-```
-
-**Parameters:** `id` (required), `points` (array or formula object), `thickness` (0=line, >0=tube), `arrow` ("none"|"start"|"end"|"both"), `slice` (degrees for partial tube), `rotation`, `color`, `opacity`
+**Parameters:** `id` (required), `points` (array or formula object), `thickness` (0=line, >0=tube), `arrow` ("none"|"start"|"end"|"both"), `rotation`, `color`, `opacity`
 
 **Formula syntax:** `{ x: "expression", y: "expression", z: "expression", tMin, tMax, tSteps }`. Use `t` as variable.
 
@@ -202,6 +191,7 @@ Creates 3D cylinders, cones, or hourglass shapes using points to define central 
 - **Cone** - tapers to point (radius: [base, 0])
 - **Hourglass** - 3+ points with varying radii
 - **Tapered beam** - 2 points with different end radii
+- **Partial cylinder** - cylinder with slice parameter
 
 ```javascript
 // Cylinder (uniform)
@@ -227,9 +217,19 @@ scene.addCylinder({
   radius: [1, 0.3, 1],
   color: "#B07CFF"
 })
+
+// Quarter pipe (partial cylinder with slice)
+scene.addCylinder({
+  id: "quarter_pipe",
+  points: [{ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 4 }],
+  radius: [1, 1],
+  slice: { start: 0, end: 90 },
+  rotation: { axis: { x: 1, y: 0, z: 0 }, angle: 0 },
+  color: "#F2C14E"
+})
 ```
 
-**Parameters:** `id` (required), `points` (2+ points along centerline), `radius` (array: one radius per point), `color`, `opacity`
+**Parameters:** `id` (required), `points` (2+ points along centerline), `radius` (array: one radius per point), `slice` (degrees for partial cylinder), `color`, `opacity`
 
 ---
 
@@ -365,36 +365,11 @@ scene.addSphere({
 
 scene.addGroup({
   id: "pendulum",
-  children: ["arm", "weight"],
-  description: "Simple Pendulum"
+  children: ["arm", "weight"]
 })
 ```
 
 **Parameters:** `id` (required), `children` (array of primitive IDs)
-
----
-
-## Animation
-
-### scene.addAnimation(config)
-Registers time-based animation loops.
-
-**Use for:** Rotating objects, orbiting bodies, pulsing scales, oscillating motions, any temporal change.
-
-```javascript
-scene.addAnimation({
-  id: "rotate_pendulum",
-  updateFunction: `
-    const angle = Math.sin(elapsed) * 0.5;
-    const pendulum = scene.getObject("pendulum");
-    if (pendulum) pendulum.rotation.z = angle;
-  `
-})
-```
-
-**Parameters:** `id` (required), `updateFunction` (function body with `elapsed`)
-
-**Access:** `scene.getObject(id)` returns object for manipulation. `THREE` namespace available.
 
 ---
 
@@ -447,16 +422,52 @@ scene.addTooltip({
 
 ---
 
+## Animation
+
+### scene.addAnimation(config)
+Registers time-based animation loops.
+
+**When to use:**
+- User explicitly asks for animation
+- Animation adds educational value (showing movement, rotation, transformation)
+- NOT for decorative effects unless user requests
+
+```javascript
+scene.addAnimation({ id: "spin", updateFunction: "scene.getObject('cube').rotation.y = elapsed;" })
+scene.addAnimation({ id: "pulse", updateFunction: "scene.getObject('heart').scale.setScalar(1 + Math.sin(elapsed * 3) * 0.1);" })
+```
+
+**Parameters:** `id`, `updateFunction` (function body with `elapsed`)
+
+**Available:** `scene.getObject(id)`, `THREE` namespace
+
+**Animate correctly:** addCircle, addDonut, addPoint, addSphere, addCustomMesh
+
+**May not animate correctly:** addLine, addPoly2D, addPoly3D, addCylinder, addGroup - animate from origin instead of intended position
+
+**Delayed appearance:** For labels and tooltips that should appear after shapes, use visibility toggling:
+```javascript
+const label = scene.getObject("label_id");
+if (label && label.parent) label.parent.visible = elapsed > 1.0;  // show after 1 second
+```
+
+**Rules:**
+- Maximum 3 concurrent animations
+- Animations clear on scene reload
+- Only add when educational or requested
+
+---
+
 ## Grid
 
 ### scene.setGrid(size)
-Set coordinate grid snap size. Default: 0.5.
+Set coordinate grid snap size. Default: 0.5. Coordinates snap to nearest grid value during rendering.
 
 ```javascript
-scene.setGrid(1.0)
+scene.setGrid(1.0)   // Coarse - large structures
+scene.setGrid(0.5)   // Default - balanced
+scene.setGrid(0.1)   // Fine - precise detail
 ```
-
-All coordinates snap to nearest grid value during validation.
 
 ---
 
@@ -530,6 +541,7 @@ For BUILD intent, return:
 
 **Rules:**
 - Use `{x,y,z}` for all coordinates, never `[x,y,z]`
-- No comments in sceneCode (system adds them)
+- No inline comments in sceneCode (system adds them)
 - Only use documented attributes
 - camera.position/target use arrays, coordinates use objects
+- Each BUILD replaces the ENTIRE scene - send **complete** scene code with **ALL** objects, do **not** send partial updates

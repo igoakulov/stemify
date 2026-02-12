@@ -15,6 +15,7 @@ export function get_starter_scenes(): SavedScene[] {
 // Quadrant centers: Q1(-4.5,-4.5), Q2(-4.5,4.5), Q3(4.5,-4.5), Q4(4.5,4.5)
 // Spot offsets: TL(-1.5,-1.5), TR(1.5,-1.5), BL(-1.5,1.5), BR(1.5,1.5)
 scene.setSmoothness(128);
+scene.setGrid(0.5);
 
 scene.addAxes({
   id: "axes",
@@ -254,6 +255,54 @@ scene.addCustomMesh({
     return mesh;
   \`
 });
+
+// Constant rotation for green torus knot and purple icosahedron
+scene.addAnimation({
+  id: "rotate_shapes",
+  updateFunction: \`
+    const torusKnot = scene.getObject("torus_knot");
+    const icosahedron = scene.getObject("icosahedron");
+    
+    if (torusKnot) {
+      torusKnot.rotation.y = elapsed * 0.5;
+      torusKnot.rotation.x = elapsed * 0.2;
+    }
+    if (icosahedron) {
+      icosahedron.rotation.y = elapsed * 0.3;
+      icosahedron.rotation.x = elapsed * 0.1;
+    }
+  \`
+});
+
+// All shapes appear by scaling from 0 to 100% over 1 second
+scene.addAnimation({
+  id: "appear",
+  updateFunction: \`
+    const t = Math.min(elapsed / 1.0, 1);
+    const scale = 1 - Math.pow(1 - t, 3);
+    
+    // Scale individual objects (direct children of scene root)
+    const directObjects = [
+      "triangle", "disc", "ring", "wavy_line",
+      "sphere", "pyramid", "icosahedron", "torus_knot"
+    ];
+    
+    // Scale groups (scale from origin)
+    const groups = [
+      "car", "house", "saturn", "hourglass", "cone"
+    ];
+    
+    directObjects.forEach(id => {
+      const obj = scene.getObject(id);
+      if (obj) obj.scale.set(scale, scale, scale);
+    });
+    
+    groups.forEach(id => {
+      const obj = scene.getObject(id);
+      if (obj) obj.scale.set(scale, scale, scale);
+    });
+  \`
+});
 `,
       objects: [
         { id: "axes", type: "axes" },
@@ -279,6 +328,7 @@ scene.addCustomMesh({
       updatedAt: now,
       sceneCode: `
 scene.addAxes({ id: "axes", length: 5 });
+scene.setGrid(0.5);
 
 // Vector v1
 scene.addLine({
@@ -348,6 +398,7 @@ scene.addAxes({
   y: { end: 4 },
   z: { end: 1 }
 });
+scene.setGrid(0.1);
 
 // Normal distribution curve
 scene.addLine({

@@ -2,17 +2,22 @@
 
 import { type FC } from "react";
 import { KeyboardShortcut } from "@/components/ui/keyboard-shortcut";
+import { GridToggle } from "@/components/GridToggle";
 import { cn } from "@/lib/utils";
 
 type SceneToolbarProps = {
   onResetCamera: () => void;
   onGoHome?: () => void;
+  gridSnap?: boolean;
+  onGridChange?: (enabled: boolean) => void;
   className?: string;
 };
 
 export const SceneToolbar: FC<SceneToolbarProps> = ({
   onResetCamera,
   onGoHome,
+  gridSnap = true,
+  onGridChange,
   className,
 }) => {
   return (
@@ -35,15 +40,16 @@ export const SceneToolbar: FC<SceneToolbarProps> = ({
 
         <div className="w-px h-4 bg-white/10 mx-1" />
 
-        {/* R shortcut inside toolbar */}
-        <div className="flex items-center gap-1.5">
+        {/* R shortcut and snap toggle */}
+        <div className="flex items-center gap-2">
           <KeyboardShortcut
             keys={["R"]}
             onTrigger={onResetCamera}
             shortcutId="scene-reset"
             className="border border-white/5 bg-white/5"
           />
-          <span className="text-[10px] text-white/50">- reset</span>
+          <span className="text-[10px] text-white/50">reset</span>
+          <GridToggle enabled={gridSnap} onToggle={onGridChange} />
         </div>
       </div>
     </div>

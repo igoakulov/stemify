@@ -21,7 +21,7 @@ import { show_error, show_warning, BANNERS } from "@/lib/chat/banner";
 export type RunOptions = {
   thread_id: ChatThreadId;
   scene: SavedScene;
-  history: Array<{ role: "user" | "assistant"; content: string }>;
+  history: ChatMessage[];
   user_text: string;
   mode: "ask" | "build";
   on_delta: (delta: string) => string | void;
@@ -39,18 +39,49 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
     throw new Error("Missing OpenRouter API key. Add it in Settings.");
   }
 
+  // Build messages per docs/context.md specification
+  // All prompts loaded fresh every request for correctness
+
+  // 1. System: start.md + api.md (combined)
   const system_prompt = await load_effective_prompt_md("start");
   const api_prompt = await load_effective_prompt_md("api");
+  const core_prompts = `${system_prompt}\n\n---\n\n${api_prompt}`;
+
+  // 2. System: current_scene.md (fresh, if scene exists)
+  const has_scene_code = options.scene.sceneCode && options.scene.sceneCode.trim().length > 0;
+  let scene_context: string | null = null;
+  if (has_scene_code) {
+    const current_scene_prompt = await load_effective_prompt_md("current_scene");
+    scene_context = current_scene_prompt.replace("{{sceneCode}}", options.scene.sceneCode);
+  }
+
+  // 3. System: ask.md or build.md (fresh)
   const mode_prompt = await load_effective_prompt_md(options.mode);
 
-  const combined_system_prompt = `${system_prompt}\n\n---\n\n${api_prompt}`;
+  // Build final message array
+  const messages: OpenRouterChatMessage[] = [];
 
-  const messages: OpenRouterChatMessage[] = [
-    { role: "system", content: combined_system_prompt },
-    { role: "system", content: mode_prompt },
-    ...options.history.map((m) => ({ role: m.role, content: m.content })),
-    { role: "user", content: options.user_text },
-  ];
+  // Message 1: Core prompts (start + api)
+  messages.push({ role: "system", content: core_prompts });
+
+  // Message 2: History (full conversation)
+  messages.push(
+    ...options.history.map((m) => ({
+      role: m.role as "system" | "user" | "assistant",
+      content: m.content,
+    }))
+  );
+
+  // Message 3: Scene context (if exists)
+  if (scene_context) {
+    messages.push({ role: "system", content: scene_context });
+  }
+
+  // Message 4: Mode prompt
+  messages.push({ role: "system", content: mode_prompt });
+
+  // Message 5: User message
+  messages.push({ role: "user", content: options.user_text });
 
   let raw = "";
   let assistant_message_id: string | null = null;
@@ -85,7 +116,6 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
   const parsed = parse_model_output(raw, options.mode);
 
   if (options.mode === "ask") {
-    // In ASK mode, we never attempt to parse/apply a scene.
     return;
   }
 

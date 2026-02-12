@@ -1,6 +1,6 @@
-BUILD INTENT
+# BUILD MODE
 
-The user message directly below is a request to create or update a visualization.
+The user selected **BUILD** mode. Their message directly below is a request to create or update a visualization.
 
 Requirements:
 - Return ONE raw JSON object with exactly two top-level keys: `scene` and `comment`

@@ -11,10 +11,43 @@ import type { SceneApi, Vec3 } from "@/lib/scene/types";
 type SceneApiDeps = {
   template: ThreeBaseTemplate;
   registry: ObjectRegistry;
+  gridConfig?: { enabled: boolean; size: number };
 };
+
+// Mutable grid state that can be shared between API and UI
+export type GridState = {
+  enabled: boolean;
+  size: number;
+};
+
+export function create_default_grid_state(): GridState {
+  return {
+    enabled: true,
+    size: 0.5,
+  };
+}
 
 function v3(p: Vec3): THREE.Vector3 {
   return new THREE.Vector3(p.x, p.y, p.z);
+}
+
+function snap_to_grid(value: number, size: number): number {
+  if (size <= 0) return value;
+  return Math.round(value / size) * size;
+}
+
+function snap_vec3(v: Vec3 | undefined, size: number): Vec3 | undefined {
+  if (!v) return v;
+  return {
+    x: snap_to_grid(v.x, size),
+    y: snap_to_grid(v.y, size),
+    z: snap_to_grid(v.z, size),
+  };
+}
+
+function snap_points(points: Vec3[], size: number): Vec3[] {
+  if (size <= 0) return points;
+  return points.map((p) => snap_vec3(p, size)!);
 }
 
 export function create_scene_api(deps: SceneApiDeps): SceneApi {
@@ -25,6 +58,18 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
 
   // Scene configuration
   let smoothness = 64; // Default segments for curved shapes (32, 64, 128)
+
+  // Grid configuration
+  const grid_enabled = deps.gridConfig?.enabled ?? true;
+  let grid_size = deps.gridConfig?.size ?? 0.5;
+
+  function get_snapped_center(center: Vec3): Vec3 {
+    return snap_vec3(center, grid_enabled ? grid_size : 0)!;
+  }
+
+  function get_snapped_points(points: Vec3[]): Vec3[] {
+    return snap_points(points, grid_enabled ? grid_size : 0);
+  }
 
   // 2D PRIMITIVES
 
@@ -41,7 +86,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     }
 
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.copy(v3(center));
+    mesh.position.copy(v3(get_snapped_center(center)));
     deps.template.root.add(mesh);
 
     deps.registry.add({
@@ -57,7 +102,6 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     points,
     thickness = 0,
     arrow = "none",
-    slice,
     rotation,
     color,
     opacity,
@@ -80,6 +124,12 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
       point_array = points as Vec3[];
     }
 
+    // Only snap if points are fixed coordinates (not from formula)
+    const should_snap = grid_enabled && grid_size > 0 && typeof points !== "object";
+    if (should_snap) {
+      point_array = get_snapped_points(point_array);
+    }
+
     const curve_points = point_array.map((p) => v3(p));
     const curve = new THREE.CatmullRomCurve3(curve_points);
     
@@ -89,12 +139,6 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
       // Tube geometry
       const tube_geometry = new THREE.TubeGeometry(curve, Math.max(1, curve_points.length - 1), thickness, 8, false);
       
-      // Handle slice if provided
-      if (slice) {
-        // For sliced tubes, we'd need custom geometry - using full tube for now
-        console.warn("Sliced tube not fully implemented");
-      }
-
       const material = deps.template.materials.mesh_default.clone();
       if (color) material.color = new THREE.Color(color);
       if (opacity !== undefined) material.opacity = opacity;
@@ -178,11 +222,14 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     opacity,
     rotation,
   }) => {
-    const shape = new THREE.Shape();
-    shape.moveTo(points[0].x, points[0].z);
+    // Apply grid snap to points
+    const snapped_points = get_snapped_points(points);
 
-    for (let i = 1; i < points.length; i++) {
-      shape.lineTo(points[i].x, points[i].z);
+    const shape = new THREE.Shape();
+    shape.moveTo(snapped_points[0].x, snapped_points[0].z);
+
+    for (let i = 1; i < snapped_points.length; i++) {
+      shape.lineTo(snapped_points[i].x, snapped_points[i].z);
     }
     shape.closePath();
 
@@ -197,7 +244,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     }
 
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.y = points[0].y;
+    mesh.position.y = snapped_points[0].y;
 
     mesh.rotation.x = Math.PI / 2;
 
@@ -229,6 +276,9 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     color,
     opacity,
   }) => {
+    // Apply grid snap to center
+    const snapped_center = get_snapped_center(center);
+
     const theta_start = slice ? (slice.start * Math.PI) / 180 : 0;
     const theta_length = slice ? ((slice.end - slice.start) * Math.PI) / 180 : Math.PI * 2;
 
@@ -276,7 +326,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
       mesh = new THREE.Mesh(geometry, material);
     }
 
-    mesh.position.copy(v3(center));
+    mesh.position.copy(v3(snapped_center));
 
     const normal = v3(direction).normalize();
     const up = new THREE.Vector3(0, 0, 1);
@@ -312,6 +362,9 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     color,
     opacity,
   }) => {
+    // Apply grid snap to center
+    const snapped_center = get_snapped_center(center);
+
     const phi_start = slice ? (slice.start * Math.PI) / 180 : 0;
     const phi_length = slice ? ((slice.end - slice.start) * Math.PI) / 180 : Math.PI;
 
@@ -325,7 +378,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     }
 
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.copy(v3(center));
+    mesh.position.copy(v3(snapped_center));
 
     // Orient based on direction vector
     const normal = v3(direction).normalize();
@@ -355,19 +408,26 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     id,
     points,
     radius,
+    slice,
     color,
     opacity,
   }) => {
+    // Apply grid snap to points
+    const snapped_points = get_snapped_points(points);
+
     // Simplified approach: create separate cylinders for each segment
     const group = new THREE.Group();
 
-    for (let i = 0; i < points.length - 1; i++) {
-      const start = v3(points[i]);
-      const end = v3(points[i + 1]);
+    const theta_start = slice ? (slice.start * Math.PI) / 180 : 0;
+    const theta_length = slice ? ((slice.end - slice.start) * Math.PI) / 180 : Math.PI * 2;
+
+    for (let i = 0; i < snapped_points.length - 1; i++) {
+      const start = v3(snapped_points[i]);
+      const end = v3(snapped_points[i + 1]);
       const mid = start.clone().add(end).multiplyScalar(0.5);
       const height = start.distanceTo(end);
 
-      const cylinder_geometry = new THREE.CylinderGeometry(radius[i + 1], radius[i], height, smoothness);
+      const cylinder_geometry = new THREE.CylinderGeometry(radius[i + 1], radius[i], height, smoothness, 1, false, theta_start, theta_length);
       const material = deps.template.materials.mesh_default.clone();
 
       if (color) material.color = new THREE.Color(color);
@@ -400,21 +460,24 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     color,
     opacity,
   }) => {
+    // Apply grid snap to points
+    const snapped_points = get_snapped_points(points);
+
     const geometry = new THREE.BufferGeometry();
     const vertices: number[] = [];
 
-    const yValues = points.map((p) => p.y);
+    const yValues = snapped_points.map((p) => p.y);
     const tolerance = 0.01;
 
-    const basePoints: typeof points = [];
-    const apexPoints: typeof points = [];
+    const basePoints: typeof snapped_points = [];
+    const apexPoints: typeof snapped_points = [];
 
     const minY = Math.min(...yValues);
-    for (let i = 0; i < points.length; i++) {
-      if (Math.abs(points[i].y - minY) < tolerance) {
-        basePoints.push(points[i]);
+    for (let i = 0; i < snapped_points.length; i++) {
+      if (Math.abs(snapped_points[i].y - minY) < tolerance) {
+        basePoints.push(snapped_points[i]);
       } else {
-        apexPoints.push(points[i]);
+        apexPoints.push(snapped_points[i]);
       }
     }
 
@@ -459,12 +522,12 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
       }
     } else {
       const centroid = new THREE.Vector3();
-      const three_points = points.map((p) => {
+      const three_points = snapped_points.map((p) => {
         const v = v3(p);
         centroid.add(v);
         return v;
       });
-      centroid.divideScalar(points.length);
+      centroid.divideScalar(snapped_points.length);
 
       for (let i = 0; i < three_points.length; i++) {
         const next = (i + 1) % three_points.length;
@@ -508,6 +571,9 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     color,
     opacity,
   }) => {
+    // Apply grid snap to center
+    const snapped_center = get_snapped_center(center);
+
     const arc = slice ? ((slice.end - slice.start) * Math.PI) / 180 : Math.PI * 2;
     const geometry = new THREE.TorusGeometry(radius, thickness, Math.max(8, smoothness / 4), smoothness, arc);
     const material = deps.template.materials.mesh_default.clone();
@@ -519,7 +585,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     }
 
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.copy(v3(center));
+    mesh.position.copy(v3(snapped_center));
 
     // Orient based on direction vector
     const normal = v3(direction).normalize();
@@ -551,7 +617,9 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     position,
     selectable: _selectable,
   } = {}) => {
-    const axes = create_axes_group({ x, y, z, length, position });
+    // Apply grid snap to position if provided
+    const snapped_position = position ? get_snapped_center(position) : undefined;
+    const axes = create_axes_group({ x, y, z, length, position: snapped_position });
     deps.template.root.add(axes);
 
     deps.registry.add({
@@ -561,6 +629,9 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
   };
 
   const addLabel: SceneApi["addLabel"] = ({ id, text, position, color, fontSizePx }) => {
+    // Apply grid snap to position
+    const snapped_position = get_snapped_center(position);
+
     const div = document.createElement("div");
     div.textContent = text;
 
@@ -577,7 +648,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     }
 
     const label = new CSS2DObject(div);
-    label.position.copy(v3(position));
+    label.position.copy(v3(snapped_position));
 
     apply_label_style(label);
 
@@ -687,15 +758,12 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
   };
 
   const setGrid: SceneApi["setGrid"] = (size) => {
-    // Grid size is used during coordinate validation
-    // This is a no-op for now - grid snap happens in validation layer
-    console.log(`Grid size set to: ${size}`);
+    grid_size = size;
   };
 
   const setSmoothness: SceneApi["setSmoothness"] = (segments) => {
     // Set the number of segments for curved shapes (32=low, 64=default, 128=high)
     smoothness = Math.max(8, Math.min(256, segments));
-    console.log(`Smoothness set to: ${smoothness} segments`);
   };
 
   const getObject: SceneApi["getObject"] = (id) => {

@@ -10,6 +10,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   clear_prompt_override,
@@ -23,26 +30,46 @@ import {
   save_openrouter_api_key,
 } from "@/lib/settings/storage";
 
-const PROMPT_INFO: Record<PromptId, { name: string; description: string }> = {
+const PROMPT_INFO: Record<
+  PromptId,
+  { name: string; description: string; order: number }
+> = {
   start: {
-    name: "Start",
+    name: "1. Start",
     description: "Sent at the start of every conversation",
-  },
-  ask: {
-    name: "Ask",
-    description: "Sent when user is asking a question",
-  },
-  build: {
-    name: "Build",
-    description: "Sent when user wants to create / update a scene",
-  },
-  generate_title: {
-    name: "Generate Title",
-    description: "Sent to auto-generate scene title in the background",
+    order: 1,
   },
   api: {
-    name: "API Reference",
-    description: "Scene API documentation for the Assistant model",
+    name: "2. API Reference",
+    description:
+      "Sent after Start prompt to teach Assistant how to build scenes",
+    order: 2,
+  },
+  invalid_scene: {
+    name: "3. Invalid Scene",
+    description:
+      "Sent when you click [Try again] in response to receiving invalid scene code from Assistant",
+    order: 3,
+  },
+  current_scene: {
+    name: "4. Current Scene",
+    description: "Sent before your message to keep Assistant informed",
+    order: 4,
+  },
+  ask: {
+    name: "5. Ask",
+    description: "Sent to signal your intent to just ask a question",
+    order: 5,
+  },
+  build: {
+    name: "6. Build",
+    description: "Sent to signal your intent to create / update a scene",
+    order: 6,
+  },
+  generate_title: {
+    name: "7. Generate Title",
+    description: "Sent to auto-generate scene title in the background",
+    order: 7,
   },
 };
 
@@ -82,10 +109,20 @@ export function SettingsDialog() {
       build: "",
       generate_title: "",
       api: "",
+      current_scene: "",
+      invalid_scene: "",
     },
   );
   const [prompt_errors, set_prompt_errors] = useState<Record<PromptId, string>>(
-    { start: "", ask: "", build: "", generate_title: "", api: "" },
+    {
+      start: "",
+      ask: "",
+      build: "",
+      generate_title: "",
+      api: "",
+      current_scene: "",
+      invalid_scene: "",
+    },
   );
 
   useEffect(() => {
@@ -98,6 +135,8 @@ export function SettingsDialog() {
         "build",
         "generate_title",
         "api",
+        "current_scene",
+        "invalid_scene",
       ] as PromptId[]) {
         const override = load_prompt_override(pid);
         if (override !== null) {
@@ -226,30 +265,37 @@ export function SettingsDialog() {
           <div className="space-y-3">
             <div className="text-sm font-medium">System prompts</div>
 
-            <div className="flex gap-1 border-b border-zinc-200 pb-1">
-              {(
-                ["start", "ask", "build", "generate_title", "api"] as PromptId[]
-              ).map((pid) => (
-                <button
-                  key={pid}
-                  type="button"
-                  onClick={() => set_active_prompt(pid)}
-                  className={`px-3 py-1.5 text-xs transition-colors ${
-                    active_prompt === pid
-                      ? "text-zinc-950 font-medium underline underline-offset-4"
-                      : "text-zinc-500 hover:text-zinc-700"
-                  }`}
-                >
-                  {PROMPT_INFO[pid].name}
-                </button>
-              ))}
-            </div>
+            <Select
+              value={active_prompt}
+              onValueChange={(value) => set_active_prompt(value as PromptId)}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select prompt" />
+              </SelectTrigger>
+              <SelectContent className="bg-white border border-zinc-200 shadow-lg">
+                {(
+                  [
+                    "start",
+                    "api",
+                    "current_scene",
+                    "ask",
+                    "build",
+                    "invalid_scene",
+                    "generate_title",
+                  ] as PromptId[]
+                )
+                  .sort((a, b) => PROMPT_INFO[a].order - PROMPT_INFO[b].order)
+                  .map((pid) => (
+                    <SelectItem key={pid} value={pid} className="text-sm">
+                      {PROMPT_INFO[pid].name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
 
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="text-xs text-muted-foreground">
-                  {PROMPT_INFO[active_prompt].description}
-                </div>
+              <div className="text-xs text-muted-foreground">
+                {PROMPT_INFO[active_prompt].description}
               </div>
               <Textarea
                 value={prompt_drafts[active_prompt]}

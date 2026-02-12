@@ -1,6 +1,6 @@
-ASK INTENT
+# ASK MODE
 
-The user message directly below is a question. Answer it clearly and educationally.
+The user selected **ASK** mode. Their message directly below is a question. Answer it clearly and educationally.
 
 Requirements:
 - Reply in normal markdown only

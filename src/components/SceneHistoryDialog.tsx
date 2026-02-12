@@ -26,6 +26,8 @@ import {
   delete_scene,
   load_saved_scenes,
   save_saved_scenes,
+  get_active_scene_id,
+  clear_active_scene_id,
   type SavedScene,
 } from "@/lib/scene/store";
 import { get_starter_scenes } from "@/lib/scene/starter_scenes";
@@ -73,6 +75,12 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
   const confirm_delete = (scene_id: string) => {
     remove_thread(scene_id);
     delete_scene(scene_id);
+    // Check if we're deleting the currently active scene
+    const current_active = get_active_scene_id();
+    if (current_active === scene_id) {
+      clear_active_scene_id();
+      window.dispatchEvent(new CustomEvent("stemify:load-scene", { detail: { scene: null } }));
+    }
     refresh();
     window.dispatchEvent(new CustomEvent("stemify:scenes-changed"));
   };

@@ -28,8 +28,10 @@ export function set_banner(banner: BannerState): void {
 }
 
 export function clear_banner(): void {
-  current_banner = null
-  listeners.forEach((listener) => listener())
+  if (!current_banner || current_banner.dismissable) {
+    current_banner = null
+    listeners.forEach((listener) => listener())
+  }
 }
 
 export function subscribe_banner(listener: () => void): () => void {
@@ -142,7 +144,6 @@ export const BANNERS: {
   PERFORMANCE_WARNING: (details: string) => ({
     message: `Scene performance warning: ${details}`,
     title: "Performance",
-    dismissable: true,
   }),
 
   WELCOME_SETUP: {

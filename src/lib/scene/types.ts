@@ -26,7 +26,8 @@ export type AddLineConfig = {
   };
   thickness?: number;
   arrow?: "none" | "start" | "end" | "both";
-  rotation?: { axis: Vec3; angle: number };
+  direction?: Vec3;
+  rotation?: number;
   color?: string;
   opacity?: number;
 };
@@ -36,7 +37,8 @@ export type AddPoly2DConfig = {
   points: Vec3[];
   color?: string;
   opacity?: number;
-  rotation?: { axis: Vec3; angle: number };
+  direction?: Vec3;
+  rotation?: number;
 };
 
 export type AddCircleConfig = {
@@ -45,7 +47,7 @@ export type AddCircleConfig = {
   radius: number;
   direction?: Vec3;
   stretch?: Vec3;
-  slice?: { start: number; end: number };
+  slice?: { start: number; end: number } | number;
   rotation?: number;
   color?: string;
   opacity?: number;
@@ -57,7 +59,7 @@ export type AddSphereConfig = {
   center: Vec3;
   radius: number;
   stretch?: Vec3;
-  slice?: { start: number; end: number };
+  slice?: { start: number; end: number } | number;
   direction?: Vec3;
   rotation?: number;
   color?: string;
@@ -68,7 +70,9 @@ export type AddCylinderConfig = {
   id: string;
   points: Vec3[];
   radius: number[];
-  slice?: { start: number; end: number };
+  slice?: { start: number; end: number } | number;
+  direction?: Vec3;
+  rotation?: number;
   color?: string;
   opacity?: number;
 };
@@ -78,6 +82,8 @@ export type AddPoly3DConfig = {
   points: Vec3[];
   color?: string;
   opacity?: number;
+  direction?: Vec3;
+  rotation?: number;
 };
 
 export type AddDonutConfig = {
@@ -86,7 +92,7 @@ export type AddDonutConfig = {
   radius: number;
   thickness: number;
   direction?: Vec3;
-  slice?: { start: number; end: number };
+  slice?: { start: number; end: number } | number;
   rotation?: number;
   color?: string;
   opacity?: number;
@@ -119,6 +125,8 @@ export type AddLabelConfig = {
 export type AddGroupConfig = {
   id: string;
   children: string[];
+  direction?: Vec3;
+  rotation?: number;
 };
 
 export type AddAnimationConfig = {
@@ -130,6 +138,8 @@ export type AddCustomMeshConfig = {
   id: string;
   createFn: string;
   color?: string;
+  direction?: Vec3;
+  rotation?: number;
 };
 
 export type AddTooltipConfig = {

@@ -70,7 +70,7 @@ scene.addLine({
   color: "#F2C14E"
 })
 
-**Parameters:** `id` (required), `points` (array or formula object), `thickness` (0=line, >0=tube), `arrow` ("none"|"start"|"end"|"both"), `rotation`, `color`, `opacity`
+**Parameters:** `id` (required), `points` (array or formula object), `thickness` (0=line, >0=tube), `arrow` ("none"|"start"|"end"|"both"), `direction`, `rotation`, `color`, `opacity`
 
 **Formula syntax:** `{ x: "expression", y: "expression", z: "expression", tMin, tMax, tSteps }`. Use `t` as variable.
 
@@ -93,7 +93,7 @@ scene.addPoly2D({
 })
 ```
 
-**Parameters:** `id` (required), `points` (3+ vertices), `color`, `opacity`, `rotation`
+**Parameters:** `id` (required), `points` (3+ vertices), `color`, `opacity`, `direction`, `rotation`
 
 ---
 
@@ -137,7 +137,7 @@ scene.addCircle({
 })
 ```
 
-**Parameters:** `id` (required), `center`, `radius`, `direction` (unit vector for facing), `stretch` (scale factors for ellipse), `slice` (degrees: start/end for arc/sector), `rotation` (degrees), `color`, `opacity`
+**Parameters:** `id` (required), `center`, `radius`, `direction` (unit vector for facing), `stretch` (scale factors for ellipse), `slice` (degrees: number for full circle arc, or {start, end} for custom arc), `rotation` (degrees), `color`, `opacity`
 
 ---
 
@@ -148,7 +148,7 @@ Creates 3D sphere (can be stretched or sliced).
 
 **Shapes:**
 - **Sphere** - perfect sphere
-- **Hemisphere** - half sphere (add `slice: { start: 0, end: 180 }`)
+- **Hemisphere** - half sphere (add `slice: 180`)
 - **Ellipsoid** - stretched sphere (add `stretch`)
 - **Spherical sector** - orange slice shape (add `slice`)
 
@@ -224,12 +224,13 @@ scene.addCylinder({
   points: [{ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 4 }],
   radius: [1, 1],
   slice: { start: 0, end: 90 },
-  rotation: { axis: { x: 1, y: 0, z: 0 }, angle: 0 },
+  direction: { x: 1, y: 0, z: 0 },
+  rotation: 45,
   color: "#F2C14E"
 })
 ```
 
-**Parameters:** `id` (required), `points` (2+ points along centerline), `radius` (array: one radius per point), `slice` (degrees for partial cylinder), `color`, `opacity`
+**Parameters:** `id` (required), `points` (2+ points along centerline), `radius` (array: one radius per point), `slice` (degrees: number or {start, end}), `direction`, `rotation`, `color`, `opacity`
 
 ---
 
@@ -256,7 +257,7 @@ scene.addPoly3D({
 })
 ```
 
-**Parameters:** `id` (required), `points` (4+ convex vertices), `color`, `opacity`
+**Parameters:** `id` (required), `points` (4+ convex vertices), `color`, `opacity`, `direction`, `rotation`
 
 ---
 
@@ -289,7 +290,7 @@ scene.addDonut({
 })
 ```
 
-**Parameters:** `id` (required), `center`, `radius` (distance to tube center), `thickness` (tube radius), `direction` (facing), `slice` (degrees), `rotation`, `color`, `opacity`
+**Parameters:** `id` (required), `center`, `radius` (distance to tube center), `thickness` (tube radius), `direction` (facing), `slice` (degrees: number or {start, end}), `rotation`, `color`, `opacity`
 
 ---
 
@@ -369,7 +370,7 @@ scene.addGroup({
 })
 ```
 
-**Parameters:** `id` (required), `children` (array of primitive IDs)
+**Parameters:** `id` (required), `children` (array of primitive IDs), `direction`, `rotation`
 
 ---
 
@@ -398,7 +399,7 @@ scene.addCustomMesh({
 })
 ```
 
-**Parameters:** `id` (required), `createFn` (function body with THREE), `color`
+**Parameters:** `id` (required), `createFn` (function body with THREE), `color`, `direction`, `rotation`
 
 ---
 

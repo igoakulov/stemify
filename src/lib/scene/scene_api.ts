@@ -50,6 +50,16 @@ function snap_points(points: Vec3[], size: number): Vec3[] {
   return points.map((p) => snap_vec3(p, size)!);
 }
 
+type SliceInput = { start: number; end: number } | number;
+
+function normalize_slice(slice: SliceInput | undefined): { start: number; end: number } | undefined {
+  if (slice === undefined) return undefined;
+  if (typeof slice === "number") {
+    return { start: 0, end: slice };
+  }
+  return slice;
+}
+
 export function create_scene_api(deps: SceneApiDeps): SceneApi {
   // Store active animations
   type AnimationFn = (elapsed: number, scene: SceneApi, THREE: typeof import("three")) => void;
@@ -102,7 +112,8 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     points,
     thickness = 0,
     arrow = "none",
-    rotation,
+    direction,
+    rotation = 0,
     color,
     opacity,
   }) => {
@@ -153,12 +164,19 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
       mesh = new THREE.Line(geometry, material);
     }
 
-    // Apply rotation if provided
-    if (rotation) {
-      mesh.setRotationFromAxisAngle(
-        v3(rotation.axis).normalize(),
-        (rotation.angle * Math.PI) / 180
-      );
+    // Apply direction and rotation
+    if (direction || rotation) {
+      const up = new THREE.Vector3(0, 0, 1);
+      
+      if (direction) {
+        const dir = v3(direction).normalize();
+        const quaternion = new THREE.Quaternion().setFromUnitVectors(up, dir);
+        mesh.setRotationFromQuaternion(quaternion);
+      }
+      
+      if (rotation) {
+        mesh.rotateZ((rotation * Math.PI) / 180);
+      }
     }
 
     // Add arrowheads if requested
@@ -220,7 +238,8 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     points,
     color,
     opacity,
-    rotation,
+    direction,
+    rotation = 0,
   }) => {
     // Apply grid snap to points
     const snapped_points = get_snapped_points(points);
@@ -248,11 +267,19 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
 
     mesh.rotation.x = Math.PI / 2;
 
-    if (rotation) {
-      mesh.setRotationFromAxisAngle(
-        v3(rotation.axis).normalize(),
-        (rotation.angle * Math.PI) / 180
-      );
+    // Apply direction and rotation
+    if (direction || rotation) {
+      const up = new THREE.Vector3(0, 0, 1);
+      
+      if (direction) {
+        const dir = v3(direction).normalize();
+        const quaternion = new THREE.Quaternion().setFromUnitVectors(up, dir);
+        mesh.setRotationFromQuaternion(quaternion);
+      }
+      
+      if (rotation) {
+        mesh.rotateZ((rotation * Math.PI) / 180);
+      }
     }
 
     deps.template.root.add(mesh);
@@ -279,8 +306,9 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     // Apply grid snap to center
     const snapped_center = get_snapped_center(center);
 
-    const theta_start = slice ? (slice.start * Math.PI) / 180 : 0;
-    const theta_length = slice ? ((slice.end - slice.start) * Math.PI) / 180 : Math.PI * 2;
+    const norm = normalize_slice(slice);
+    const theta_start = norm ? (norm.start * Math.PI) / 180 : 0;
+    const theta_length = norm ? ((norm.end - norm.start) * Math.PI) / 180 : Math.PI * 2;
 
     const is_outline = opacity === 0;
 
@@ -365,8 +393,9 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     // Apply grid snap to center
     const snapped_center = get_snapped_center(center);
 
-    const phi_start = slice ? (slice.start * Math.PI) / 180 : 0;
-    const phi_length = slice ? ((slice.end - slice.start) * Math.PI) / 180 : Math.PI;
+    const norm = normalize_slice(slice);
+    const phi_start = norm ? (norm.start * Math.PI) / 180 : 0;
+    const phi_length = norm ? ((norm.end - norm.start) * Math.PI) / 180 : Math.PI;
 
     const geometry = new THREE.SphereGeometry(radius, smoothness, Math.max(8, smoothness / 2), 0, Math.PI * 2, phi_start, phi_length);
     const material = deps.template.materials.mesh_default.clone();
@@ -409,6 +438,8 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     points,
     radius,
     slice,
+    direction,
+    rotation = 0,
     color,
     opacity,
   }) => {
@@ -418,8 +449,9 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     // Simplified approach: create separate cylinders for each segment
     const group = new THREE.Group();
 
-    const theta_start = slice ? (slice.start * Math.PI) / 180 : 0;
-    const theta_length = slice ? ((slice.end - slice.start) * Math.PI) / 180 : Math.PI * 2;
+    const norm = normalize_slice(slice);
+    const theta_start = norm ? (norm.start * Math.PI) / 180 : 0;
+    const theta_length = norm ? ((norm.end - norm.start) * Math.PI) / 180 : Math.PI * 2;
 
     for (let i = 0; i < snapped_points.length - 1; i++) {
       const start = v3(snapped_points[i]);
@@ -444,6 +476,21 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
       group.add(cylinder);
     }
 
+    // Apply direction and rotation to entire group
+    if (direction || rotation) {
+      const up = new THREE.Vector3(0, 0, 1);
+      
+      if (direction) {
+        const dir = v3(direction).normalize();
+        const quaternion = new THREE.Quaternion().setFromUnitVectors(up, dir);
+        group.setRotationFromQuaternion(quaternion);
+      }
+      
+      if (rotation) {
+        group.rotateZ((rotation * Math.PI) / 180);
+      }
+    }
+
     deps.template.root.add(group);
 
     deps.registry.add({
@@ -459,6 +506,8 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     points,
     color,
     opacity,
+    direction,
+    rotation = 0,
   }) => {
     // Apply grid snap to points
     const snapped_points = get_snapped_points(points);
@@ -550,6 +599,22 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     }
 
     const mesh = new THREE.Mesh(geometry, material);
+
+    // Apply direction and rotation
+    if (direction || rotation) {
+      const up = new THREE.Vector3(0, 0, 1);
+      
+      if (direction) {
+        const dir = v3(direction).normalize();
+        const quaternion = new THREE.Quaternion().setFromUnitVectors(up, dir);
+        mesh.setRotationFromQuaternion(quaternion);
+      }
+      
+      if (rotation) {
+        mesh.rotateZ((rotation * Math.PI) / 180);
+      }
+    }
+
     deps.template.root.add(mesh);
 
     deps.registry.add({
@@ -574,7 +639,8 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     // Apply grid snap to center
     const snapped_center = get_snapped_center(center);
 
-    const arc = slice ? ((slice.end - slice.start) * Math.PI) / 180 : Math.PI * 2;
+    const norm = normalize_slice(slice);
+    const arc = norm ? ((norm.end - norm.start) * Math.PI) / 180 : Math.PI * 2;
     const geometry = new THREE.TorusGeometry(radius, thickness, Math.max(8, smoothness / 4), smoothness, arc);
     const material = deps.template.materials.mesh_default.clone();
     
@@ -675,6 +741,8 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
   const addGroup: SceneApi["addGroup"] = ({
     id,
     children,
+    direction,
+    rotation = 0,
   }) => {
     const group = new THREE.Group();
 
@@ -684,6 +752,21 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
         group.add(child);
       }
     });
+
+    // Apply direction and rotation to entire group
+    if (direction || rotation) {
+      const up = new THREE.Vector3(0, 0, 1);
+      
+      if (direction) {
+        const dir = v3(direction).normalize();
+        const quaternion = new THREE.Quaternion().setFromUnitVectors(up, dir);
+        group.setRotationFromQuaternion(quaternion);
+      }
+      
+      if (rotation) {
+        group.rotateZ((rotation * Math.PI) / 180);
+      }
+    }
 
     deps.template.root.add(group);
 
@@ -727,6 +810,8 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     id,
     createFn,
     color,
+    direction,
+    rotation = 0,
   }) => {
     const fn = new Function("THREE", createFn);
     const mesh = fn(THREE) as THREE.Mesh;
@@ -741,6 +826,21 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
         material.color = new THREE.Color(color);
       }
       mesh.material = material;
+    }
+
+    // Apply direction and rotation
+    if (direction || rotation) {
+      const up = new THREE.Vector3(0, 0, 1);
+      
+      if (direction) {
+        const dir = v3(direction).normalize();
+        const quaternion = new THREE.Quaternion().setFromUnitVectors(up, dir);
+        mesh.setRotationFromQuaternion(quaternion);
+      }
+      
+      if (rotation) {
+        mesh.rotateZ((rotation * Math.PI) / 180);
+      }
     }
 
     deps.template.root.add(mesh);

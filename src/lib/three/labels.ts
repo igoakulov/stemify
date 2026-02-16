@@ -13,8 +13,16 @@ export const LABEL_STYLE = {
   letter_spacing: "0.01em",
 } as const;
 
-export function apply_label_style(label: CSS2DObject): void {
+export function apply_label_style(label: CSS2DObject, objectId?: string): void {
   const el = label.element as HTMLElement;
+
+  el.classList.add("css2d-label");
+  if (objectId) {
+    el.dataset.objectId = objectId;
+  }
+  // Make labels selectable by clicking
+  el.style.cursor = "pointer";
+  el.style.pointerEvents = "auto";
 
   el.style.fontFamily = LABEL_STYLE.font_family;
   el.style.fontSize = `${LABEL_STYLE.font_size_px}px`;

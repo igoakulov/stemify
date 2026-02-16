@@ -1,7 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { History, Plus, Settings, Pencil, Check, X, Copy } from "lucide-react";
+import {
+  History,
+  Plus,
+  Settings,
+  Pencil,
+  Check,
+  X,
+  Copy,
+  Code2,
+} from "lucide-react";
 
 import { Thread } from "@/components/assistant-ui/thread";
 import {
@@ -12,11 +21,22 @@ import {
 } from "@/components/chat/ChatRuntimeProvider";
 import { Button } from "@/components/ui/button";
 import type { SavedScene } from "@/lib/scene/store";
-import { get_thread, set_thread_title, get_current_abort_controller, set_current_abort_controller } from "@/lib/chat/store";
+import {
+  get_thread,
+  set_thread_title,
+  get_current_abort_controller,
+  set_current_abort_controller,
+} from "@/lib/chat/store";
+import type { ChatMessage } from "@/lib/chat/types";
 import { run_chat_turn } from "@/lib/chat/runner";
 import { clear_banner } from "@/lib/chat/banner";
 import { generate_title } from "@/lib/chat/title";
-import { upsert_scene, save_saved_scenes, load_saved_scenes, set_active_scene_id } from "@/lib/scene/store";
+import {
+  upsert_scene,
+  save_saved_scenes,
+  load_saved_scenes,
+  set_active_scene_id,
+} from "@/lib/scene/store";
 
 const format_chat_for_clipboard = (thread_id: string): string => {
   const snapshot = get_thread(thread_id);
@@ -50,7 +70,8 @@ const format_chat_for_clipboard = (thread_id: string): string => {
         meta_parts.push(format_datetime(m.created_at));
       }
 
-      const meta_line = meta_parts.length > 0 ? ` (${meta_parts.join(", ")})` : "";
+      const meta_line =
+        meta_parts.length > 0 ? ` (${meta_parts.join(", ")})` : "";
       return `${header}${meta_line}:\n${m.content}`.trimEnd();
     })
     .join("\n\n---\n\n");
@@ -59,6 +80,13 @@ const format_chat_for_clipboard = (thread_id: string): string => {
 export type ChatPanelProps = {
   active_scene: SavedScene | null;
   on_scene_title_change?: (new_title: string) => void;
+  onSceneEditorToggle?: () => void;
+  showSceneEditorButton?: boolean;
+  isSceneEditorOpen?: boolean;
+  validationError?: string | null;
+  hideContent?: boolean;
+  hideHeader?: boolean;
+  headerOnly?: boolean;
 };
 
 export function ChatPanel(props: ChatPanelProps) {
@@ -67,6 +95,7 @@ export function ChatPanel(props: ChatPanelProps) {
   const [is_editing_title, set_is_editing_title] = useState(false);
   const [edit_title_value, set_edit_title_value] = useState("");
   const [copied, set_copied] = useState(false);
+  const [chat_hovered, set_chat_hovered] = useState(false);
 
   const current_title = useCallback(() => {
     if (!thread_id) return "Untitled";
@@ -83,7 +112,11 @@ export function ChatPanel(props: ChatPanelProps) {
   }, [current_title, thread_id]);
 
   const on_first_assistant_response = useCallback(
-    async (options: { thread_id: string; first_user_message: string; scene: SavedScene }) => {
+    async (options: {
+      thread_id: string;
+      first_user_message: string;
+      scene: SavedScene;
+    }) => {
       const current = get_thread(options.thread_id);
       if (current.title) return;
 
@@ -98,10 +131,13 @@ export function ChatPanel(props: ChatPanelProps) {
             title: title,
             updatedAt: Date.now(),
           });
-          window.dispatchEvent(new CustomEvent("stemify:scenes-changed", { detail: { activeId: options.scene.id } }));
+          window.dispatchEvent(
+            new CustomEvent("stemify:scenes-changed", {
+              detail: { activeId: options.scene.id },
+            }),
+          );
         }
-      } catch {
-      }
+      } catch {}
     },
     [],
   );
@@ -118,7 +154,6 @@ export function ChatPanel(props: ChatPanelProps) {
       createdAt: now,
       updatedAt: now,
       sceneCode: "",
-      objects: [],
     };
 
     // Persist the new scene
@@ -128,7 +163,9 @@ export function ChatPanel(props: ChatPanelProps) {
 
     // Notify AppShell of new scene
     window.dispatchEvent(
-      new CustomEvent("stemify:scenes-changed", { detail: { activeId: new_scene.id } })
+      new CustomEvent("stemify:scenes-changed", {
+        detail: { activeId: new_scene.id },
+      }),
     );
 
     return { threadId: new_scene.id, scene: new_scene };
@@ -139,9 +176,10 @@ export function ChatPanel(props: ChatPanelProps) {
       thread_id: string;
       scene: SavedScene;
       user_text: string;
-      mode: "ask" | "build";
+      mode: "ask" | "build" | "fix";
       model_id: string | undefined;
       on_first_delta: (assistant_message_id: string) => void;
+      history?: ChatMessage[];
     }) => {
       clear_banner();
 
@@ -149,11 +187,12 @@ export function ChatPanel(props: ChatPanelProps) {
 
       try {
         const snapshot = get_thread(options.thread_id);
+        const history = options.history ?? snapshot.messages;
 
         await run_chat_turn({
           thread_id: options.thread_id,
           scene: options.scene,
-          history: snapshot.messages,
+          history,
           user_text: options.user_text,
           mode: options.mode,
           on_delta: (delta) => {
@@ -189,7 +228,12 @@ export function ChatPanel(props: ChatPanelProps) {
 
   const save_title = useCallback(() => {
     const trimmed = edit_title_value.trim();
-    if (trimmed && trimmed !== display_title && props.active_scene && thread_id) {
+    if (
+      trimmed &&
+      trimmed !== display_title &&
+      props.active_scene &&
+      thread_id
+    ) {
       set_thread_title(thread_id, trimmed);
       set_display_title(trimmed);
       upsert_scene({
@@ -197,14 +241,18 @@ export function ChatPanel(props: ChatPanelProps) {
         title: trimmed,
         updatedAt: Date.now(),
       });
-      window.dispatchEvent(new CustomEvent("stemify:scenes-changed", { detail: { activeId: props.active_scene.id } }));
+      window.dispatchEvent(
+        new CustomEvent("stemify:scenes-changed", {
+          detail: { activeId: props.active_scene.id },
+        }),
+      );
     }
     set_is_editing_title(false);
   }, [edit_title_value, display_title, thread_id, props.active_scene]);
 
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-between gap-2 border-b border-white/5 px-4 py-2">
+  if (props.headerOnly) {
+    return (
+      <div className="flex items-center justify-between gap-2 px-4 py-2 shrink-0">
         {props.active_scene && is_editing_title ? (
           <div className="flex items-center gap-1 flex-1 min-w-0">
             <input
@@ -257,7 +305,7 @@ export function ChatPanel(props: ChatPanelProps) {
                 size="icon"
                 className="h-7 w-7 transition-all duration-200"
                 onClick={start_editing_title}
-                title="Edit title"
+                title="Edit Title"
               >
                 <Pencil className="h-4 w-4" />
               </Button>
@@ -271,7 +319,7 @@ export function ChatPanel(props: ChatPanelProps) {
                 onClick={() => {
                   window.dispatchEvent(new Event("stemify:new-scene"));
                 }}
-                title="New scene"
+                title="New Scene"
               >
                 <Plus className="h-4 w-4" />
               </Button>
@@ -281,26 +329,9 @@ export function ChatPanel(props: ChatPanelProps) {
                 size="icon"
                 className="h-7 w-7 transition-all duration-200"
                 onClick={() => {
-                  if (thread_id) {
-                    const text = format_chat_for_clipboard(thread_id);
-                    navigator.clipboard.writeText(text);
-                    set_copied(true);
-                    setTimeout(() => set_copied(false), 1500);
-                  }
-                }}
-                title="Copy conversation"
-              >
-                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              </Button>
-              <Button
-                type="button"
-                variant="toolbar"
-                size="icon"
-                className="h-7 w-7 transition-all duration-200"
-                onClick={() => {
                   window.dispatchEvent(new Event("stemify:open-history"));
                 }}
-                title="Scene history"
+                title="Scene History"
               >
                 <History className="h-4 w-4" />
               </Button>
@@ -316,6 +347,29 @@ export function ChatPanel(props: ChatPanelProps) {
               >
                 <Settings className="h-4 w-4" />
               </Button>
+              {props.showSceneEditorButton && (
+                <Button
+                  type="button"
+                  variant="toolbar"
+                  size="icon"
+                  className={`h-7 w-7 transition-all duration-200 relative ${
+                    props.isSceneEditorOpen
+                      ? "bg-white/10 text-amber-400 hover:bg-white/15"
+                      : "hover:bg-white/5"
+                  }`}
+                  onClick={() => {
+                    props.onSceneEditorToggle?.();
+                  }}
+                  title="Scene Editor [ / ]"
+                >
+                  <Code2 className="h-4 w-4" />
+                  {props.validationError && (
+                    <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                      !
+                    </span>
+                  )}
+                </Button>
+              )}
             </div>
           </>
         ) : (
@@ -330,7 +384,7 @@ export function ChatPanel(props: ChatPanelProps) {
                 onClick={() => {
                   window.dispatchEvent(new Event("stemify:new-scene"));
                 }}
-                title="New scene"
+                title="New Scene"
               >
                 <Plus className="h-4 w-4" />
               </Button>
@@ -342,7 +396,7 @@ export function ChatPanel(props: ChatPanelProps) {
                 onClick={() => {
                   window.dispatchEvent(new Event("stemify:open-history"));
                 }}
-                title="Scene history"
+                title="Scene History"
               >
                 <History className="h-4 w-4" />
               </Button>
@@ -358,12 +412,258 @@ export function ChatPanel(props: ChatPanelProps) {
               >
                 <Settings className="h-4 w-4" />
               </Button>
+              {props.showSceneEditorButton && (
+                <Button
+                  type="button"
+                  variant="toolbar"
+                  size="icon"
+                  className={`h-7 w-7 transition-all duration-200 relative ${
+                    props.isSceneEditorOpen
+                      ? "bg-white/10 text-amber-400 hover:bg-white/15"
+                      : "hover:bg-white/5"
+                  }`}
+                  onClick={() => {
+                    props.onSceneEditorToggle?.();
+                  }}
+                  title="Scene Editor [ / ]"
+                >
+                  <Code2 className="h-4 w-4" />
+                  {props.validationError && (
+                    <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                      !
+                    </span>
+                  )}
+                </Button>
+              )}
             </div>
           </>
         )}
       </div>
+    );
+  }
 
-      <div className="min-h-0 flex-1">
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      {!props.hideHeader && (
+        <div className="flex items-center justify-between gap-2 border-b border-white/5 px-4 py-2 shrink-0">
+          {props.active_scene && is_editing_title ? (
+            <div className="flex items-center gap-1 flex-1 min-w-0">
+              <input
+                type="text"
+                value={edit_title_value}
+                onChange={(e) => set_edit_title_value(e.target.value)}
+                className="flex-1 bg-transparent text-sm font-medium text-white/80 outline-none min-w-0"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    save_title();
+                  } else if (e.key === "Escape") {
+                    cancel_editing_title();
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                variant="toolbar"
+                size="icon"
+                className="h-7 w-7 transition-all duration-200"
+                onClick={save_title}
+                title="Save"
+              >
+                <Check className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="toolbar"
+                size="icon"
+                className="h-7 w-7 transition-all duration-200"
+                onClick={cancel_editing_title}
+                title="Cancel"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : props.active_scene ? (
+            <>
+              <div className="flex items-center gap-1 min-w-0 flex-1">
+                <div
+                  className="truncate text-sm font-medium text-white/80 cursor-pointer hover:text-white transition-colors"
+                  onClick={start_editing_title}
+                >
+                  {display_title}
+                </div>
+                <Button
+                  type="button"
+                  variant="toolbar"
+                  size="icon"
+                  className="h-7 w-7 transition-all duration-200"
+                  onClick={start_editing_title}
+                  title="Edit Title"
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="toolbar"
+                  size="icon"
+                  className="h-7 w-7 transition-all duration-200"
+                  onClick={() => {
+                    window.dispatchEvent(new Event("stemify:new-scene"));
+                  }}
+                  title="New Scene"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="toolbar"
+                  size="icon"
+                  className="h-7 w-7 transition-all duration-200"
+                  onClick={() => {
+                    window.dispatchEvent(new Event("stemify:open-history"));
+                  }}
+                  title="Scene History"
+                >
+                  <History className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="toolbar"
+                  size="icon"
+                  className="h-7 w-7 transition-all duration-200"
+                  onClick={() => {
+                    window.dispatchEvent(new Event("stemify:open-settings"));
+                  }}
+                  title="Settings"
+                >
+                  <Settings className="h-4 w-4" />
+                </Button>
+                {props.showSceneEditorButton && (
+                  <Button
+                    type="button"
+                    variant="toolbar"
+                    size="icon"
+                    className={`h-7 w-7 transition-all duration-200 relative ${
+                      props.isSceneEditorOpen
+                        ? "bg-white/10 text-amber-400 hover:bg-white/15"
+                        : "hover:bg-white/5"
+                    }`}
+                    onClick={() => {
+                      props.onSceneEditorToggle?.();
+                    }}
+                    title="Scene Editor [ / ]"
+                  >
+                    <Code2 className="h-4 w-4" />
+                    {props.validationError && (
+                      <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                        !
+                      </span>
+                    )}
+                  </Button>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex-1" />
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="toolbar"
+                  size="icon"
+                  className="h-7 w-7 transition-all duration-200"
+                  onClick={() => {
+                    window.dispatchEvent(new Event("stemify:new-scene"));
+                  }}
+                  title="New Scene"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="toolbar"
+                  size="icon"
+                  className="h-7 w-7 transition-all duration-200"
+                  onClick={() => {
+                    window.dispatchEvent(new Event("stemify:open-history"));
+                  }}
+                  title="Scene History"
+                >
+                  <History className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="toolbar"
+                  size="icon"
+                  className="h-7 w-7 transition-all duration-200"
+                  onClick={() => {
+                    window.dispatchEvent(new Event("stemify:open-settings"));
+                  }}
+                  title="Settings"
+                >
+                  <Settings className="h-4 w-4" />
+                </Button>
+                {props.showSceneEditorButton && (
+                  <Button
+                    type="button"
+                    variant="toolbar"
+                    size="icon"
+                    className={`h-7 w-7 transition-all duration-200 relative ${
+                      props.isSceneEditorOpen
+                        ? "bg-white/10 text-amber-400 hover:bg-white/15"
+                        : "hover:bg-white/5"
+                    }`}
+                    onClick={() => {
+                      props.onSceneEditorToggle?.();
+                    }}
+                    title="Scene Editor [ / ]"
+                  >
+                    <Code2 className="h-4 w-4" />
+                    {props.validationError && (
+                      <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                        !
+                      </span>
+                    )}
+                  </Button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      <div
+        className={`min-h-0 flex-1 relative ${props.hideContent ? "hidden" : ""}`}
+        onMouseEnter={() => set_chat_hovered(true)}
+        onMouseLeave={() => set_chat_hovered(false)}
+      >
+        {props.active_scene && (
+          <Button
+            type="button"
+            variant="toolbar"
+            size="icon"
+            className={`absolute top-2 right-4 h-7 w-7 z-10 transition-opacity duration-200 ${
+              chat_hovered ? "opacity-100" : "opacity-0"
+            }`}
+            onClick={() => {
+              if (thread_id) {
+                const text = format_chat_for_clipboard(thread_id);
+                navigator.clipboard.writeText(text);
+                set_copied(true);
+                setTimeout(() => set_copied(false), 1500);
+              }
+            }}
+            title="Copy conversation"
+          >
+            {copied ? (
+              <Check className="h-4 w-4" />
+            ) : (
+              <Copy className="h-4 w-4" />
+            )}
+          </Button>
+        )}
         <ChatRuntimeProvider
           thread_id={thread_id}
           on_resolve_thread={on_resolve_thread}

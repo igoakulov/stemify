@@ -9,21 +9,19 @@ import { upsert_scene, type SavedScene } from "@/lib/scene/store";
 
 import type { ChatMessage, ChatThreadId } from "@/lib/chat/types";
 import {
-  get_comment_markdown,
   get_scene_code,
   parse_model_output,
 } from "@/lib/chat/parse";
 import { validate_scene_code } from "@/lib/chat/scene_apply";
 import { validate_llm_response } from "@/lib/scene/validation";
-import { get_thread, replace_message } from "@/lib/chat/store";
-import { show_error, show_warning, BANNERS } from "@/lib/chat/banner";
+import { show_error, show_warning, BANNERS, prepare_error_context } from "@/lib/chat/banner";
 
 export type RunOptions = {
   thread_id: ChatThreadId;
   scene: SavedScene;
   history: ChatMessage[];
   user_text: string;
-  mode: "ask" | "build";
+  mode: "ask" | "build" | "fix";
   on_delta: (delta: string) => string | void;
   signal?: AbortSignal;
 };
@@ -47,12 +45,12 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
   const api_prompt = await load_effective_prompt_md("api");
   const core_prompts = `${system_prompt}\n\n---\n\n${api_prompt}`;
 
-  // 2. System: current_scene.md (fresh, if scene exists)
+  // 2. System: scene.md (fresh, if scene exists)
   const has_scene_code = options.scene.sceneCode && options.scene.sceneCode.trim().length > 0;
   let scene_context: string | null = null;
   if (has_scene_code) {
-    const current_scene_prompt = await load_effective_prompt_md("current_scene");
-    scene_context = current_scene_prompt.replace("{{sceneCode}}", options.scene.sceneCode);
+    const scene_prompt = await load_effective_prompt_md("scene");
+    scene_context = scene_prompt.replace("{{sceneCode}}", options.scene.sceneCode);
   }
 
   // 3. System: ask.md or build.md (fresh)
@@ -120,39 +118,80 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
   }
 
   if (parsed.kind === "text") {
+    console.log("[Runner] NOTHING_TO_BUILD - setting last error");
+    prepare_error_context({
+      thread_id: options.thread_id,
+      user_message: options.user_text,
+      error_message: "No scene code in response",
+      invalid_json: raw,
+      scene: options.scene,
+      mode: options.mode,
+    });
     const config = BANNERS.NOTHING_TO_BUILD;
     show_warning(config.message, {
       title: config.title,
       actions: config.actions,
     });
-    throw new Error("Build mode expected JSON but received plain text.");
+    return;
   }
 
   const scene_code = get_scene_code(parsed.payload);
   if (!scene_code) {
-    throw new Error("Model returned JSON but no valid scene.sceneCode.");
+    const error_msg = "Model returned JSON but no valid scene";
+    prepare_error_context({
+      thread_id: options.thread_id,
+      user_message: options.user_text,
+      error_message: error_msg,
+      invalid_json: raw,
+      scene: options.scene,
+      mode: options.mode,
+    });
+    const config = BANNERS.INVALID_SCENE_CODE;
+    show_error(config.message, {
+      title: config.title,
+      actions: config.actions,
+    });
+    return;
   }
 
   // Stage 1: Validate LLM response structure and content
   const llm_validation = validate_llm_response(parsed.payload);
   if (!llm_validation.valid) {
+    const error_msg = llm_validation.error ?? "Unknown validation error";
+    prepare_error_context({
+      thread_id: options.thread_id,
+      user_message: options.user_text,
+      error_message: error_msg,
+      invalid_json: raw,
+      scene: options.scene,
+      mode: options.mode,
+    });
     const config = BANNERS.INVALID_SCENE_CODE;
     show_error(config.message, {
       title: config.title,
       actions: config.actions,
     });
-    throw new Error(`LLM response validation failed: ${llm_validation.error ?? "Unknown error"}`);
+    return;
   }
 
   // Stage 2: Validate scene code can execute
   const validation = validate_scene_code(scene_code);
   if (!validation.ok) {
+    const error_msg = validation.error ?? "Unknown scene error";
+    prepare_error_context({
+      thread_id: options.thread_id,
+      user_message: options.user_text,
+      error_message: error_msg,
+      invalid_json: raw,
+      scene: options.scene,
+      mode: options.mode,
+    });
     const config = BANNERS.INVALID_SCENE_CODE;
     show_error(config.message, {
       title: config.title,
       actions: config.actions,
     });
-    throw new Error(`Invalid scene code: ${validation.error ?? "Unknown error"}`);
+    return;
   }
 
   // Show performance warnings if any
@@ -171,29 +210,4 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
     sceneCode: scene_code,
   });
   window.dispatchEvent(new CustomEvent("stemify:scenes-changed", { detail: { activeId: options.scene.id } }));
-
-  // Render comment into the assistant message if present.
-  const md = get_comment_markdown(parsed.payload);
-  if (md && assistant_message_id) {
-    const thread = get_thread(options.thread_id);
-    const current_msg = thread.messages.find((m: ChatMessage) => m.id === assistant_message_id);
-    if (current_msg) {
-      const json_block = "```json\n" + raw.trim() + "\n```";
-      const combined_content = json_block + "\n\n" + md;
-      replace_message(options.thread_id, assistant_message_id, {
-        content: combined_content,
-      });
-      window.dispatchEvent(new Event("stemify:chat-changed"));
-      return;
-    }
-  }
-
-  // Scene applied but comment missing/invalid - still show the JSON
-  if (assistant_message_id) {
-    const json_block = "```json\n" + raw.trim() + "\n```";
-    replace_message(options.thread_id, assistant_message_id, {
-      content: json_block,
-    });
-    window.dispatchEvent(new Event("stemify:chat-changed"));
-  }
 }

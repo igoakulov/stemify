@@ -17,6 +17,7 @@ import { MarkdownText, CodeHeader } from "@/components/assistant-ui/markdown-tex
 import { ChatStatusBanner } from "@/components/chat/ChatStatusBanner";
 import { RecentScenes } from "@/components/chat/RecentScenes";
 import { OpenRouterModelSelector } from "@/components/openrouter/OpenRouterModelSelector";
+import { is_fix_mode } from "@/lib/chat/banner";
 import { Button } from "@/components/ui/button";
 import { KeyboardShortcut } from "@/components/ui/keyboard-shortcut";
 import { load_chat_mode, save_chat_mode, type ChatMode } from "@/lib/chat/mode";
@@ -480,7 +481,7 @@ const AssistantMessage: FC = () => {
             <span className="h-1.5 w-1.5 rounded-full bg-zinc-500 animate-bounce" style={{ animationDelay: "150ms" }} />
             <span className="h-1.5 w-1.5 rounded-full bg-zinc-500 animate-bounce" style={{ animationDelay: "300ms" }} />
           </div>
-          <span className="text-xs text-zinc-500">Thinking...</span>
+          <span className="text-xs text-zinc-500">{is_fix_mode() ? "Fixing scene..." : "Thinking..."}</span>
         </div>
       ) : (
         <div className="px-2">

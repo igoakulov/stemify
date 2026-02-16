@@ -35,7 +35,7 @@ export async function generate_title(
     throw new Error("Missing API key for title generation");
   }
 
-  const system_prompt = await load_effective_prompt_md("generate_title" as PromptId);
+  const system_prompt = await load_effective_prompt_md("title" as PromptId);
 
   const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
     { role: "system", content: system_prompt },

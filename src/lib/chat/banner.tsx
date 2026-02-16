@@ -1,85 +1,140 @@
-import type { ReactNode } from "react"
+import type { ReactNode } from "react";
+import type { SavedScene } from "@/lib/scene/store";
 
-export type BannerType = "error" | "warning" | "suggestion"
+export type BannerType = "error" | "warning" | "suggestion";
 
 export type BannerAction = {
-  label: string
-  onClick: () => void
-}
+  label: string;
+  onClick: () => void;
+};
 
 export type BannerState = {
-  type: BannerType
-  title?: string
-  message: ReactNode
-  actions?: BannerAction[]
-  dismissable?: boolean
-} | null
+  type: BannerType;
+  title?: string;
+  message: ReactNode;
+  actions?: BannerAction[];
+  dismissable?: boolean;
+} | null;
 
-let current_banner: BannerState = null
-const listeners: Set<() => void> = new Set()
+let current_banner: BannerState = null;
+const listeners: Set<() => void> = new Set();
 
 export function get_banner(): BannerState {
-  return current_banner
+  return current_banner;
 }
 
 export function set_banner(banner: BannerState): void {
-  current_banner = banner
-  listeners.forEach((listener) => listener())
+  current_banner = banner;
+  listeners.forEach((listener) => listener());
 }
 
 export function clear_banner(): void {
   if (!current_banner || current_banner.dismissable) {
-    current_banner = null
-    listeners.forEach((listener) => listener())
+    current_banner = null;
+    listeners.forEach((listener) => listener());
   }
 }
 
 export function subscribe_banner(listener: () => void): () => void {
-  listeners.add(listener)
+  listeners.add(listener);
   return () => {
-    listeners.delete(listener)
-  }
+    listeners.delete(listener);
+  };
 }
 
-export function show_error(message: ReactNode, options?: {
-  title?: string
-  actions?: BannerAction[]
-  dismissable?: boolean
-}): void {
+export type RetryContext = {
+  thread_id: string;
+  user_message: string;
+  error_message: string;
+  invalid_json?: string;
+  scene: SavedScene;
+  mode: "ask" | "build" | "fix";
+};
+
+let last_error: RetryContext | null = null;
+let fix_mode_active = false;
+
+export function set_fix_mode(active: boolean): void {
+  fix_mode_active = active;
+}
+
+export function is_fix_mode(): boolean {
+  return fix_mode_active;
+}
+
+export function prepare_error_context(context: RetryContext): void {
+  console.log("[Banner] prepare_error_context called:", context);
+  last_error = context;
+}
+
+export function get_error_context(): RetryContext | null {
+  return last_error;
+}
+
+export function clear_error_context(): void {
+  last_error = null;
+}
+
+export function create_retry_action(): BannerAction {
+  console.log("[Banner] create_retry_action called");
+  return {
+    label: "Redo",
+    onClick: () => {
+      console.log("[Banner] Redo clicked!");
+      window.dispatchEvent(new CustomEvent("stemify:retry-failed"));
+    },
+  };
+}
+
+export function show_error(
+  message: ReactNode,
+  options?: {
+    title?: string;
+    actions?: BannerAction[];
+    dismissable?: boolean;
+  },
+): void {
   set_banner({
     type: "error",
     message,
     title: options?.title,
     actions: options?.actions,
     dismissable: options?.dismissable ?? true,
-  })
+  });
 }
 
-export function show_warning(message: ReactNode, options?: {
-  title?: string
-  actions?: BannerAction[]
-  dismissable?: boolean
-}): void {
+export function show_warning(
+  message: ReactNode,
+  options?: {
+    title?: string;
+    actions?: BannerAction[];
+    dismissable?: boolean;
+  },
+): void {
+  console.log("[Banner] show_warning called, actions:", options?.actions);
   set_banner({
     type: "warning",
     message,
     title: options?.title,
     actions: options?.actions,
     dismissable: options?.dismissable ?? true,
-  })
+  });
 }
 
-export function show_suggestion(message: ReactNode, options?: {
-  title?: string
-  actions?: BannerAction[]
-}): void {
+export function show_suggestion(
+  message: ReactNode,
+  options?: {
+    title?: string;
+    actions?: BannerAction[];
+  },
+): void {
   set_banner({
     type: "suggestion",
     message,
     title: options?.title,
     actions: options?.actions,
     dismissable: false,
-  })
+  });
 }
 
 export type BannerConfig = {
@@ -118,7 +173,7 @@ export const BANNERS: {
       {
         label: "Add API key",
         onClick: () => {
-          window.dispatchEvent(new CustomEvent("stemify:open-settings"))
+          window.dispatchEvent(new CustomEvent("stemify:open-settings"));
         },
       },
     ],
@@ -130,15 +185,17 @@ export const BANNERS: {
   }),
 
   NOTHING_TO_BUILD: {
-    message: "Assistant's response has no scene code, nothing to BUILD.",
+    message:
+      "Assistant's response has no scene code. Click redo or try a new prompt.",
     title: "Nothing to BUILD",
-    actions: [{ label: "Try again", onClick: () => {} }],
+    actions: [create_retry_action()],
   },
 
   INVALID_SCENE_CODE: {
-    message: "Assistant's code for the scene is invalid. Try making your prompt more clear.",
+    message:
+      "Assistant's scene code has an issue. Click redo or try a new prompt.",
     title: "Scene Code Issue",
-    actions: [{ label: "Try again", onClick: () => {} }],
+    actions: [create_retry_action()],
   },
 
   PERFORMANCE_WARNING: (details: string) => ({
@@ -158,7 +215,8 @@ export const BANNERS: {
         >
           OpenRouter
         </a>{" "}
-        API key. It is stored locally in your browser and never leaves your device.
+        API key. It is stored locally in your browser and never leaves your
+        device.
       </>
     ),
     title: "Welcome! Let's get you set up",
@@ -166,7 +224,7 @@ export const BANNERS: {
       {
         label: "Add API key",
         onClick: () => {
-          window.dispatchEvent(new CustomEvent("stemify:open-settings"))
+          window.dispatchEvent(new CustomEvent("stemify:open-settings"));
         },
       },
     ],
@@ -175,6 +233,5 @@ export const BANNERS: {
   GENERIC_ERROR: (message: string) => ({
     message,
     title: "Error",
-    actions: [{ label: "Try again", onClick: () => {} }],
   }),
-}
+};

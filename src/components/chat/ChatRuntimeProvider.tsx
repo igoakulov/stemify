@@ -20,8 +20,9 @@ import {
   update_message_content,
 } from "@/lib/chat/store";
 import { load_openrouter_model_id } from "@/lib/settings/storage";
-import { show_error, BANNERS } from "@/lib/chat/banner";
+import { show_error, BANNERS, get_error_context, clear_error_context, clear_banner, set_fix_mode } from "@/lib/chat/banner";
 import { get_current_abort_controller, set_current_abort_controller } from "@/lib/chat/store";
+import { load_effective_prompt_md } from "@/lib/prompts/system_prompt";
 
 export type ResolvedThread = {
   threadId: string;
@@ -36,9 +37,10 @@ type ChatRuntimeProviderProps = {
     thread_id: ChatThreadId;
     scene: SavedScene;
     user_text: string;
-    mode: "ask" | "build";
+    mode: "ask" | "build" | "fix";
     model_id: string | undefined;
     on_first_delta: (assistant_message_id: string) => void;
+    history?: ChatMessage[];
   }) => Promise<void>;
   on_first_assistant_response?: (options: {
     thread_id: ChatThreadId;
@@ -143,7 +145,7 @@ export function ChatRuntimeProvider(props: ChatRuntimeProviderProps) {
         created_at: Date.now(),
         meta: {
           mode,
-          model_id: resolved_scene.id,
+          model_id: load_openrouter_model_id(),
         },
       };
       append_message(resolved_thread_id, user_msg);
@@ -177,7 +179,7 @@ export function ChatRuntimeProvider(props: ChatRuntimeProviderProps) {
           scene: resolved_scene,
           user_text,
           mode,
-          model_id: resolved_scene.id,
+          model_id: load_openrouter_model_id(),
           on_first_delta: async (assistant_message_id) => {
             const assistant_msg: ChatMessage = {
               id: assistant_message_id,
@@ -186,7 +188,7 @@ export function ChatRuntimeProvider(props: ChatRuntimeProviderProps) {
               created_at: Date.now(),
               meta: {
                 mode,
-                model_id: resolved_scene.id,
+                model_id: load_openrouter_model_id(),
               },
             };
             append_message(resolved_thread_id, assistant_msg);
@@ -268,7 +270,7 @@ export function ChatRuntimeProvider(props: ChatRuntimeProviderProps) {
           scene: resolved_scene,
           user_text,
           mode,
-          model_id: resolved_scene.id,
+          model_id: load_openrouter_model_id(),
           on_first_delta: (assistant_message_id) => {
             const assistant_msg: ChatMessage = {
               id: assistant_message_id,
@@ -277,7 +279,7 @@ export function ChatRuntimeProvider(props: ChatRuntimeProviderProps) {
               created_at: Date.now(),
               meta: {
                 mode,
-                model_id: resolved_scene.id,
+                model_id: load_openrouter_model_id(),
               },
             };
             append_message(resolved_thread_id, assistant_msg);
@@ -299,6 +301,99 @@ export function ChatRuntimeProvider(props: ChatRuntimeProviderProps) {
     },
     [on_send_user_message, thread_id, on_resolve_thread],
   );
+
+  useEffect(() => {
+    console.log("[ChatRuntimeProvider] Retry useEffect mounted");
+    const handle_retry = async () => {
+      console.log("[ChatRuntimeProvider] Retry handler fired!");
+      const error_ctx = get_error_context();
+      console.log("[ChatRuntimeProvider] error_ctx:", error_ctx);
+      if (!error_ctx) return;
+
+      const retry_prompt = await load_effective_prompt_md("fix");
+      const error_context_text = retry_prompt
+        .replace("{{errors}}", error_ctx.error_message)
+        .replace("{{invalid_json}}", error_ctx.invalid_json || "");
+
+      const snapshot = get_thread(error_ctx.thread_id);
+
+      const last_user_idx = snapshot.messages.findLastIndex((m) => m.role === "user");
+      let truncated_messages = snapshot.messages;
+      if (last_user_idx >= 0) {
+        truncated_messages = snapshot.messages.slice(0, last_user_idx + 1);
+      }
+
+      if (truncated_messages.length !== snapshot.messages.length) {
+        console.log("[ChatRuntimeProvider] Truncating history from", snapshot.messages.length, "to", truncated_messages.length, "messages");
+        set_thread(error_ctx.thread_id, { ...snapshot, messages: truncated_messages });
+      }
+
+      const history: ChatMessage[] = truncated_messages.map((m) => ({ ...m }));
+
+      history.unshift({
+        id: create_message_id("msg_system"),
+        role: "system",
+        content: error_context_text,
+        created_at: Date.now(),
+        meta: {},
+      });
+
+      clear_error_context();
+      clear_banner();
+      set_fix_mode(true);
+
+      const controller = new AbortController();
+      set_current_abort_controller(controller);
+
+      set_is_running(error_ctx.thread_id, true);
+      window.dispatchEvent(new Event("stemify:chat-changed"));
+
+      try {
+        await on_send_user_message({
+          thread_id: error_ctx.thread_id,
+          scene: error_ctx.scene,
+          user_text: error_ctx.user_message,
+          mode: "fix",
+          model_id: load_openrouter_model_id(),
+          history,
+          on_first_delta: async (assistant_message_id) => {
+            const assistant_msg: ChatMessage = {
+              id: assistant_message_id,
+              role: "assistant",
+              content: "",
+              created_at: Date.now(),
+              meta: {
+                mode: "fix" as const,
+                model_id: load_openrouter_model_id(),
+              },
+            };
+            append_message(error_ctx.thread_id, assistant_msg);
+            window.dispatchEvent(new Event("stemify:chat-changed"));
+          },
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "An error occurred";
+        const config = BANNERS.GENERIC_ERROR(message);
+        show_error(config.message, {
+          title: config.title,
+          actions: config.actions,
+        });
+        window.dispatchEvent(new Event("stemify:chat-changed"));
+      } finally {
+        set_current_abort_controller(null);
+        set_is_running(error_ctx.thread_id, false);
+        set_fix_mode(false);
+        window.dispatchEvent(new Event("stemify:chat-changed"));
+      }
+    };
+
+    window.addEventListener("stemify:retry-failed", handle_retry);
+    console.log("[ChatRuntimeProvider] Retry listener registered");
+    return () => {
+      console.log("[ChatRuntimeProvider] Retry listener removed");
+      window.removeEventListener("stemify:retry-failed", handle_retry);
+    };
+  }, [on_send_user_message]);
 
   const runtime = useExternalStoreRuntime<ChatMessage>({
     messages: state.messages,

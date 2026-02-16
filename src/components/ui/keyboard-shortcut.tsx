@@ -168,6 +168,7 @@ export const KeyboardShortcut: FC<KeyboardShortcutProps> = ({
         onClick={handleSpanClick}
         className={cn(baseStyles, hoverStyles, activeStyles, "cursor-pointer", className)}
         title={label}
+        data-active={isVisuallyActive}
       >
         {content}
       </span>
@@ -180,6 +181,7 @@ export const KeyboardShortcut: FC<KeyboardShortcutProps> = ({
       onClick={handleClick}
       className={cn(baseStyles, hoverStyles, className, activeStyles, "focus:outline-none")}
       title={label}
+      data-active={isVisuallyActive}
     >
       {content}
     </button>

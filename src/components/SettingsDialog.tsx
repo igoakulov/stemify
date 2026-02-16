@@ -35,39 +35,38 @@ const PROMPT_INFO: Record<
   { name: string; description: string; order: number }
 > = {
   start: {
-    name: "1. Start",
+    name: "Start",
     description: "Sent at the start of every conversation",
     order: 1,
   },
   api: {
-    name: "2. API Reference",
+    name: "API Reference",
     description:
       "Sent after Start prompt to teach Assistant how to build scenes",
     order: 2,
   },
-  invalid_scene: {
-    name: "3. Invalid Scene",
-    description:
-      "Sent when you click [Try again] in response to receiving invalid scene code from Assistant",
+  scene: {
+    name: "Scene",
+    description: "Sent before your message to keep Assistant informed",
     order: 3,
   },
-  current_scene: {
-    name: "4. Current Scene",
-    description: "Sent before your message to keep Assistant informed",
+  ask: {
+    name: "ASK",
+    description: "Sent to signal your intent to just ask a question",
     order: 4,
   },
-  ask: {
-    name: "5. Ask",
-    description: "Sent to signal your intent to just ask a question",
+  build: {
+    name: "BUILD",
+    description: "Sent to signal your intent to create / update a scene",
     order: 5,
   },
-  build: {
-    name: "6. Build",
-    description: "Sent to signal your intent to create / update a scene",
+  fix: {
+    name: "FIX",
+    description: "Sent when fixing validation errors in previous response",
     order: 6,
   },
-  generate_title: {
-    name: "7. Generate Title",
+  title: {
+    name: "Title",
     description: "Sent to auto-generate scene title in the background",
     order: 7,
   },
@@ -107,10 +106,10 @@ export function SettingsDialog() {
       start: "",
       ask: "",
       build: "",
-      generate_title: "",
+      title: "",
       api: "",
-      current_scene: "",
-      invalid_scene: "",
+      scene: "",
+      fix: "",
     },
   );
   const [prompt_errors, set_prompt_errors] = useState<Record<PromptId, string>>(
@@ -118,10 +117,10 @@ export function SettingsDialog() {
       start: "",
       ask: "",
       build: "",
-      generate_title: "",
+      title: "",
       api: "",
-      current_scene: "",
-      invalid_scene: "",
+      scene: "",
+      fix: "",
     },
   );
 
@@ -133,10 +132,10 @@ export function SettingsDialog() {
         "start",
         "ask",
         "build",
-        "generate_title",
+        "title",
         "api",
-        "current_scene",
-        "invalid_scene",
+        "scene",
+        "fix",
       ] as PromptId[]) {
         const override = load_prompt_override(pid);
         if (override !== null) {
@@ -277,11 +276,11 @@ export function SettingsDialog() {
                   [
                     "start",
                     "api",
-                    "current_scene",
+                    "scene",
                     "ask",
                     "build",
-                    "invalid_scene",
-                    "generate_title",
+                    "fix",
+                    "title",
                   ] as PromptId[]
                 )
                   .sort((a, b) => PROMPT_INFO[a].order - PROMPT_INFO[b].order)

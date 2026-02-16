@@ -9,10 +9,10 @@ const PROMPT_URLS: Record<PromptId, string> = {
   start: "/prompts/start.md",
   ask: "/prompts/ask.md",
   build: "/prompts/build.md",
-  generate_title: "/prompts/generate_title.md",
+  title: "/prompts/title.md",
   api: "/prompts/api.md",
-  current_scene: "/prompts/current_scene.md",
-  invalid_scene: "/prompts/invalid_scene.md",
+  scene: "/prompts/scene.md",
+  fix: "/prompts/fix.md",
 };
 
 export async function load_default_prompt_md(prompt_id: PromptId): Promise<string> {

@@ -4,545 +4,412 @@ Call `scene.addX()` methods to create 3D visualizations. All coordinates use `{ 
 
 ---
 
-## Hierarchy
+## Primitives
 
-Use in this order:
-1. **Primitives** - Standard shapes (points, lines, circles, spheres, etc.)
-2. **Groups** - Composite shapes from multiple primitives (pendulum, capsule, hourglass)
-3. **Custom Mesh** - Complex shapes that primitives and groups can't create (last resort)
+### Common Parameters
+
+All primitives share:
+- `id`: required, use short self-evident names for shapes / objects
+- `selectable`: default true, allows user to play with objects manually (explore and edit parameters), set false if plays no meaningful role in scene
+- `color`: default #E6E8EB
+- `opacity`: default 1.0, affects fill (outline remains opaque)
+- `direction`: orientation vector (unit vector), default {x:0,y:0,z:1} = perpendicular to XY plane. {x:0,y:1,z:0} = perpendicular to XZ plane. circle/donut/poly2d/sphere: surface normal / hemisphere opening direction. cylinder: applies rotation to entire shape AFTER building along points - redundant/confusing, use points to define axis instead.
+- `rotation`: default 0, degrees, along facing direction
+
+Exception: addPoint only supports id, center, color, selectable.
+Can omit optional parameter entirely when using its default value.
+Examples below do not showcase these shared parameters, unless they implement a notable shape.
 
 ---
-
-## 2D Primitives
 
 ### scene.addPoint(config)
 Creates a marker point (small sphere).
 
-**Shapes:** Point marker, origin indicator, data point
-
 ```javascript
 scene.addPoint({
-  id: "origin",
-  center: { x: 0, y: 0, z: 0 },
-  color: "#F25C54"
+    id: "origin",
+    center: { x: 0, y: 0, z: 0 },
 })
 ```
-
-**Parameters:** `id` (required), `center`, `color`
 
 ---
 
 ### scene.addLine(config)
 Creates lines, tubes, or curves. Supports points array OR formula expression.
 
-**Shapes:**
-- **Line** - thin line between points (thickness: 0)
-- **Wire** - same as line
-- **Tube** - volumetric cylinder along path (thickness > 0)
-- **Vector** - tube with arrowhead (add `arrow: "end"`)
-- **Polyline** - line through 3+ points
-- **Arc** - tube with slice parameter
-- **Formula curve** - parametric curve (sine, helix, parabola)
-
 ```javascript
-// Line with arrow (vector)
+// Vector (line with arrow)
 scene.addLine({
-  id: "vector",
-  points: [{ x: 0, y: 0, z: 0 }, { x: 2, y: 1, z: 0 }],
-  thickness: 0.1,
-  arrow: "end",
-  color: "#2D7FF9"
+    id: "vector",
+    points: [{ x: 0, y: 0, z: 0 }, { x: 2, y: 1, z: 0 }],
+    thickness: 0,  // 0=line, >0=tube
+    arrow: "end",  // "none"|"start"|"end"|"both"
 })
 
-// Curved tube through points (polyline)
+// Tube (thick line)
 scene.addLine({
-  id: "pipe",
-  points: [{ x: 0, y: 0, z: 0 }, { x: 2, y: 3, z: 0 }, { x: 5, y: 0, z: 0 }],
-  thickness: 0.5,
-  color: "#2FBF71"
+    id: "pipe",
+    points: [{ x: 0, y: 0, z: 0 }, { x: 5, y: 3, z: 0 }],  // more points make a curve
+    thickness: 0.5,
 })
 
-// Formula curve (parametric: sine wave)
+// Formula curve (parametric)
 scene.addLine({
-  id: "sine",
-  points: { x: "t", y: "Math.sin(t)", z: "0", tMin: 0, tMax: 6.28, tSteps: 100 },
-  thickness: 0.05,
-  color: "#F2C14E"
+    id: "sine",
+    points: { x: "t", y: "Math.sin(t)", z: "0", tMin: 0, tMax: 6.28, tSteps: 100 },
+    thickness: 0.05,
 })
+```
 
-**Parameters:** `id` (required), `points` (array or formula object), `thickness` (0=line, >0=tube), `arrow` ("none"|"start"|"end"|"both"), `direction`, `rotation`, `color`, `opacity`
-
-**Formula syntax:** `{ x: "expression", y: "expression", z: "expression", tMin, tMax, tSteps }`. Use `t` as variable.
+Formula: `{ x: "expr", y: "expr", z: "expr", tMin, tMax, tSteps }`. Use `t` as variable.
 
 ---
 
 ### scene.addPoly2D(config)
 Creates 2D polygons from vertices.
 
-**Shapes:**
-- **Triangle** - 3 vertices
-- **Rectangle/square** - 4 vertices
-- **Pentagon, hexagon, etc.** - 5+ vertices
-
 ```javascript
 scene.addPoly2D({
-  id: "triangle",
-  points: [{ x: 0, y: 0, z: 0 }, { x: 3, y: 0, z: 0 }, { x: 0, y: 4, z: 0 }],
-  color: "#2D7FF9",
-  opacity: 0.3
+    id: "triangle",
+    points: [{ x: 0, y: 0, z: 0 }, { x: 3, y: 0, z: 0 }, { x: 0, y: 4, z: 0 }],
+    opacity: 0.3
 })
 ```
-
-**Parameters:** `id` (required), `points` (3+ vertices), `color`, `opacity`, `direction`, `rotation`
 
 ---
 
 ### scene.addCircle(config)
-Creates 2D circular disc or ring (can be sliced for arcs/sectors).
-
-**Shapes:**
-- **Disc** - filled circle (opacity > 0)
-- **Ring** - outline only (opacity: 0)
-- **Sector** - pie slice with fill (add `slice`)
-- **Arc** - pie slice outline only (opacity: 0 + slice)
-- **Ellipse** - stretched circle (add `stretch`)
+Creates 2D disc, ring, sector, or ellipse.
 
 ```javascript
-// Disc (filled circle)
+// Disc
 scene.addCircle({
-  id: "plate",
-  center: { x: 0, y: 0, z: 0 },
-  radius: 3,
-  direction: { x: 0, y: 0, z: 1 },
-  color: "#2FBF71"
-})
-
-// Sector (pie slice with fill)
-scene.addCircle({
-  id: "sector",
-  center: { x: 0, y: 0, z: 0 },
-  radius: 3,
-  slice: { start: 0, end: 60 },
-  direction: { x: 0, y: 0, z: 1 },
-  color: "#B07CFF"
+    id: "plate",
+    center: { x: 0, y: 0, z: 0 },
+    radius: 3,
 })
 
 // Ring (outline only)
 scene.addCircle({
-  id: "ring",
-  center: { x: 0, y: 0, z: 0 },
-  radius: 4,
-  opacity: 0,
-  color: "#E6E8EB"
+    id: "ring",
+    center: { x: 0, y: 0, z: 0 },
+    radius: 4,
+    opacity: 0,
+})
+
+// Sector (pie slice)
+scene.addCircle({
+    id: "sector",
+    center: { x: 0, y: 0, z: 0 },
+    radius: 3,
+    slice: { start: 0, end: 60 },  // arc degrees
+})
+
+// Ellipse
+scene.addCircle({
+    id: "ellipse",
+    center: { x: 0, y: 0, z: 0 },
+    radius: 3,
+    stretch: { x: 1.5, y: 1, z: 1 },
+    rotation: 45,
 })
 ```
-
-**Parameters:** `id` (required), `center`, `radius`, `direction` (unit vector for facing), `stretch` (scale factors for ellipse), `slice` (degrees: number for full circle arc, or {start, end} for custom arc), `rotation` (degrees), `color`, `opacity`
 
 ---
 
-## 3D Primitives
-
 ### scene.addSphere(config)
-Creates 3D sphere (can be stretched or sliced).
-
-**Shapes:**
-- **Sphere** - perfect sphere
-- **Hemisphere** - half sphere (add `slice: 180`)
-- **Ellipsoid** - stretched sphere (add `stretch`)
-- **Spherical sector** - orange slice shape (add `slice`)
+Creates 3D sphere, ellipsoid, or hemisphere.
 
 ```javascript
+// Sphere
 scene.addSphere({
-  id: "ball",
-  center: { x: 0, y: 2, z: 0 },
-  radius: 1.5,
-  color: "#F25C54"
+    id: "ball",
+    center: { x: 0, y: 2, z: 0 },
+    radius: 1.5,
 })
 
+// Ellipsoid
 scene.addSphere({
-  id: "football",
-  center: { x: 0, y: 0, z: 0 },
-  radius: 2,
-  stretch: { x: 1, y: 1.5, z: 0.8 },
-  color: "#2FBF71"
+    id: "football",
+    center: { x: 0, y: 0, z: 0 },
+    radius: 2,
+    stretch: { x: 1, y: 1.5, z: 0.8 },
 })
 
+// Hemisphere
 scene.addSphere({
-  id: "dome",
-  center: { x: 0, y: 0, z: 0 },
-  radius: 3,
-  slice: { start: 0, end: 180 },
-  direction: { x: 1, y: 0, z: 0 },
-  rotation: 90,
-  color: "#2D7FF9"
+    id: "dome",
+    center: { x: 0, y: 0, z: 0 },
+    radius: 3,
+    slice: { start: 0, end: 180 },
+    direction: { x: 1, y: 0, z: 0 },
+    rotation: 90,
 })
 ```
-
-**Parameters:** `id` (required), `center`, `radius`, `stretch` (scale factors for ellipsoid), `slice` (degrees for sector), `direction` (unit vector for slice facing), `rotation` (degrees), `color`, `opacity`
 
 ---
 
 ### scene.addCylinder(config)
-Creates 3D cylinders, cones, or hourglass shapes using points to define central axis.
-
-**Shapes:**
-- **Cylinder** - uniform radius at both ends
-- **Cone** - tapers to point (radius: [base, 0])
-- **Hourglass** - 3+ points with varying radii
-- **Tapered beam** - 2 points with different end radii
-- **Partial cylinder** - cylinder with slice parameter
+Creates cylinders, cones, or hourglass shapes.
 
 ```javascript
-// Cylinder (uniform)
+// Cylinder
 scene.addCylinder({
-  id: "column",
-  points: [{ x: 0, y: 0, z: 0 }, { x: 0, y: 5, z: 0 }],
-  radius: [1, 1],
-  color: "#E6E8EB"
+    id: "column",
+    points: [{ x: 0, y: 0, z: 0 }, { x: 0, y: 5, z: 0 }],
+    radius: [1],
 })
 
-// Cone (tapering to point)
+// Cone
 scene.addCylinder({
-  id: "spike",
-  points: [{ x: 0, y: 0, z: 0 }, { x: 0, y: 3, z: 0 }],
-  radius: [1.5, 0],
-  color: "#F25C54"
+    id: "spike",
+    points: [{ x: 0, y: 0, z: 0 }, { x: 0, y: 3, z: 0 }],
+    radius: [1.5, 0],
 })
 
-// Hourglass (3+ points, varying radius)
+// Hourglass
 scene.addCylinder({
-  id: "hourglass",
-  points: [{ x: 0, y: 0, z: 0 }, { x: 0, y: 2, z: 0 }, { x: 0, y: 4, z: 0 }],
-  radius: [1, 0.3, 1],
-  color: "#B07CFF"
+    id: "hourglass",
+    points: [{ x: 0, y: 0, z: 0 }, { x: 0, y: 2, z: 0 }, { x: 0, y: 4, z: 0 }],
+    radius: [1, 0.3, 1],
 })
 
-// Quarter pipe (partial cylinder with slice)
+// Partial cylinder
 scene.addCylinder({
-  id: "quarter_pipe",
-  points: [{ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 4 }],
-  radius: [1, 1],
-  slice: { start: 0, end: 90 },
-  direction: { x: 1, y: 0, z: 0 },
-  rotation: 45,
-  color: "#F2C14E"
+    id: "quarter_pipe",
+    points: [{ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 4 }],
+    radius: [1],
+    slice: { start: 0, end: 90 },
+    direction: { x: 1, y: 0, z: 0 },
+    rotation: 45,
+    color: "#F2C14E"
 })
 ```
-
-**Parameters:** `id` (required), `points` (2+ points along centerline), `radius` (array: one radius per point), `slice` (degrees: number or {start, end}), `direction`, `rotation`, `color`, `opacity`
 
 ---
 
 ### scene.addPoly3D(config)
-Creates 3D convex polyhedra from vertices. System auto-generates faces from convex hull.
-
-**Shapes:**
-- **Pyramid** - 4 base vertices + 1 apex
-- **Tetrahedron** - 4 triangular faces
-- **Octahedron** - 8 triangular faces
-- Any convex polyhedron with 4+ vertices
+Creates 3D convex polyhedra from vertices.
 
 ```javascript
 scene.addPoly3D({
-  id: "pyramid",
-  points: [
-    { x: 0, y: 0, z: 0 },
-    { x: 2, y: 0, z: 0 },
-    { x: 2, y: 0, z: 2 },
-    { x: 0, y: 0, z: 2 },
-    { x: 1, y: 2, z: 1 }
-  ],
-  color: "#F2C14E"
+    id: "pyramid",
+    points: [
+        { x: 0, y: 0, z: 0 },
+        { x: 2, y: 0, z: 0 },
+        { x: 2, y: 0, z: 2 },
+        { x: 0, y: 0, z: 2 },
+        { x: 1, y: 2, z: 1 }
+    ],
+    color: "#F2C14E"
 })
 ```
-
-**Parameters:** `id` (required), `points` (4+ convex vertices), `color`, `opacity`, `direction`, `rotation`
 
 ---
 
 ### scene.addDonut(config)
-Creates 3D torus (ring with circular cross-section).
-
-**Shapes:**
-- **Torus** - full ring
-- **Partial torus** - arc/ring with slice
-- **Elliptical torus** - stretched ring
+Creates torus, partial torus, or elliptical torus.
 
 ```javascript
+// Torus
 scene.addDonut({
-  id: "ring",
-  center: { x: 0, y: 0, z: 0 },
-  radius: 5,
-  thickness: 0.8,
-  direction: { x: 0, y: 0, z: 1 },
-  color: "#B07CFF"
+    id: "ring",
+    center: { x: 0, y: 0, z: 0 },
+    radius: 5,
+    thickness: 0.8,
 })
 
+// Partial torus
 scene.addDonut({
-  id: "arc",
-  center: { x: 0, y: 0, z: 0 },
-  radius: 4,
-  thickness: 0.5,
-  slice: { start: 0, end: 270 },
-  direction: { x: 0, y: 0, z: 1 },
-  color: "#2FBF71"
+    id: "arc",
+    center: { x: 0, y: 0, z: 0 },
+    radius: 4,
+    thickness: 0.5,
+    slice: { start: 0, end: 270 },
 })
 ```
 
-**Parameters:** `id` (required), `center`, `radius` (distance to tube center), `thickness` (tube radius), `direction` (facing), `slice` (degrees: number or {start, end}), `rotation`, `color`, `opacity`
+---
+
+## Complex Shapes & Compositions
+
+### scene.addGroup(config)
+Groups primitives that move/rotate together.
+
+```javascript
+scene.addCylinder({
+    id: "arm",
+    points: [{ x: 0, y: 0, z: 0 }, { x: 0, y: -3, z: 0 }],
+    radius: [0.1],
+})
+
+scene.addSphere({
+    id: "weight",
+    center: { x: 0, y: -3, z: 0 },
+    radius: 0.5,
+})
+
+scene.addGroup({
+    id: "pendulum",
+    children: ["arm", "weight"],
+    rotation: 30
+})
+```
+
+---
+
+### scene.addCustomMesh(config)
+Full Three.js access for shapes primitives cannot create.
+
+```javascript
+scene.addCustomMesh({
+    id: "complex",
+    createFn: `
+        const geometry = new THREE.IcosahedronGeometry(2, 0);
+        const material = new THREE.MeshStandardMaterial({ color: 0x2D7FF9, roughness: 0.5 });
+        return new THREE.Mesh(geometry, material);
+    `
+})
+```
 
 ---
 
 ## Infrastructure
 
 ### scene.addAxes(config)
-Creates X/Y/Z coordinate axes with colored arrows.
-
-**Shapes:** Axes, coordinate frame, reference triad
+Creates X/Y/Z coordinate axes.
 
 ```javascript
 scene.addAxes({
-  id: "world_axes",
-  length: 5,
-  position: { x: 0, y: 0, z: 0 },
-  selectable: false
+    id: "world",
+    x: { start: -5, end: 5 },
+    y: { start: 0, end: 5 },
+    z: { start: -5, end: 5 },
+    length: 5,
+    position: { x: 0, y: 0, z: 0 }
 })
 ```
-
-**Parameters:** `id` (required), `length`, `position`, `selectable`
 
 ---
 
 ### scene.addLabel(config)
-Creates text labels with Markdown and LaTeX math support.
-
-**Shapes:** Label, annotation, equation
+Creates text labels with Markdown and LaTeX support.
 
 ```javascript
 scene.addLabel({
-  id: "velocity",
-  text: "Velocity \\(v = 5\\,m/s\\)",
-  position: { x: 3, y: 2, z: 0 },
-  color: "#E6E8EB",
-  fontSizePx: 16
+    id: "velocity",
+    text: "Velocity \\(v = 5\\,m/s\\)",
+    position: { x: 3, y: 2, z: 0 },
+    color: "#E6E8EB",
+    fontSizePx: 16
 })
 ```
 
-**Parameters:** `id` (required), `text` (Markdown + LaTeX), `position`, `color`, `fontSizePx`
-
-**LaTeX:** Inline `\\( ... \\)`, Display `\\[ ... \\]`
+LaTeX: Inline `\\( ... \\)`, Display `\\[ ... \\]`
 
 ---
 
-## Groups & Composition
-
-### scene.addGroup(config)
-Creates composite objects from multiple primitives. Children move/rotate together.
-
-**When to use groups:** Complex shapes that require multiple primitives working together, where the primitives should be manipulated as a single unit.
-
-**Shapes that need groups:**
-- **Capsule** - cylinder + 2 hemispheres (spheres at ends)
-- **Pendulum** - rod (cylinder) + bob (sphere)
-- **Double cone** - 2 cones base-to-base
-- **Ladder** - 2 vertical rails + horizontal rungs
-- **Molecule** - spheres (atoms) + cylinders (bonds)
+### scene.setGrid(size)
+Set coordinate grid snap size.
 
 ```javascript
-scene.addCylinder({
-  id: "arm",
-  points: [{ x: 0, y: 0, z: 0 }, { x: 0, y: -3, z: 0 }],
-  radius: [0.1, 0.1],
-  color: "#E6E8EB"
-})
-
-scene.addSphere({
-  id: "weight",
-  center: { x: 0, y: -3, z: 0 },
-  radius: 0.5,
-  color: "#F25C54"
-})
-
-scene.addGroup({
-  id: "pendulum",
-  children: ["arm", "weight"]
-})
+scene.setGrid(1.0)   // Coarse
+scene.setGrid(0.5)   // Default
+scene.setGrid(0.1)   // Fine
 ```
-
-**Parameters:** `id` (required), `children` (array of primitive IDs), `direction`, `rotation`
 
 ---
 
-## Custom Mesh (Last Resort)
-
-### scene.addCustomMesh(config)
-Full Three.js access for shapes that primitives and groups cannot create.
-
-**When to use:** Klein bottle, Möbius strip, parametric surfaces, irregular closed forms - any shape that defies construction from primitives.
-
-**Shapes that need custom mesh:**
-- **Klein bottle** - non-orientable surface
-- **Möbius strip** - one-sided surface
-- **Parametric surface** - complex math-defined geometry
-- **Impossible geometry** - Penrose stairs, Escher-style forms
+### scene.setSmoothness(segments)
+Set curve smoothness (8-256, default 64).
 
 ```javascript
-scene.addCustomMesh({
-  id: "complex",
-  createFn: `
-    const geometry = new THREE.IcosahedronGeometry(2, 0);
-    const material = new THREE.MeshStandardMaterial({ color: 0x2D7FF9, roughness: 0.5 });
-    return new THREE.Mesh(geometry, material);
-  `,
-  color: "#2D7FF9"
-})
+scene.setSmoothness(32)   // Low
+scene.setSmoothness(64)   // Default
+scene.setSmoothness(128)  // High
 ```
 
-**Parameters:** `id` (required), `createFn` (function body with THREE), `color`, `direction`, `rotation`
+Affected: `addCircle`, `addSphere`, `addDonut`
 
 ---
 
-## Tooltips
+## Tooltips & Animation
 
 ### scene.addTooltip(config)
-Registers an object for hover detection and tooltip display.
+Registers object for hover tooltip.
 
 ```javascript
+// Label + properties
 scene.addTooltip({
-  id: "ball",
-  title: "Point Mass",
-  properties: [
-    { label: "Mass", value: "2.0 kg" },
-    { label: "Velocity", value: "5 m/s" }
-  ]
+    id: "ball",
+    title: "Point Mass",
+    properties: [
+        { label: "Mass", value: "2.0 kg" },
+        { label: "Velocity", value: "5 m/s" }
+    ]
+})
+
+// Text only
+scene.addTooltip({
+    id: "hint",
+    title: "Hover me"
 })
 ```
 
-**Parameters:** `id` (required), `title`, `properties` (array of {label, value})
-
 ---
-
-## Animation
 
 ### scene.addAnimation(config)
 Registers time-based animation loops.
 
-**When to use:**
-- User explicitly asks for animation
-- Animation adds educational value (showing movement, rotation, transformation)
-- NOT for decorative effects unless user requests
-
 ```javascript
-scene.addAnimation({ id: "spin", updateFunction: "scene.getObject('cube').rotation.y = elapsed;" })
-scene.addAnimation({ id: "pulse", updateFunction: "scene.getObject('heart').scale.setScalar(1 + Math.sin(elapsed * 3) * 0.1);" })
+scene.addAnimation({
+    id: "spin",
+    updateFunction: "scene.getObject('cube').rotation.y = elapsed;"
+})
+
+scene.addAnimation({
+    id: "pulse",
+    updateFunction: "scene.getObject('heart').scale.setScalar(1 + Math.sin(elapsed * 3) * 0.1);"
+})
 ```
 
-**Parameters:** `id`, `updateFunction` (function body with `elapsed`)
+Available: `scene.getObject(id)`, `THREE` namespace.
 
-**Available:** `scene.getObject(id)`, `THREE` namespace
+Animate correctly: addCircle, addDonut, addPoint, addSphere, addCustomMesh.
 
-**Animate correctly:** addCircle, addDonut, addPoint, addSphere, addCustomMesh
-
-**May not animate correctly:** addLine, addPoly2D, addPoly3D, addCylinder, addGroup - animate from origin instead of intended position
-
-**Delayed appearance:** For labels and tooltips that should appear after shapes, use visibility toggling:
+Delayed appearance:
 ```javascript
 const label = scene.getObject("label_id");
-if (label && label.parent) label.parent.visible = elapsed > 1.0;  // show after 1 second
+if (label && label.parent) label.parent.visible = elapsed > 1.0;
 ```
 
-**Rules:**
-- Maximum 3 concurrent animations
-- Animations clear on scene reload
-- Only add when educational or requested
-
----
-
-## Grid
-
-### scene.setGrid(size)
-Set coordinate grid snap size. Default: 0.5. Coordinates snap to nearest grid value during rendering.
-
-```javascript
-scene.setGrid(1.0)   // Coarse - large structures
-scene.setGrid(0.5)   // Default - balanced
-scene.setGrid(0.1)   // Fine - precise detail
-```
-
----
-
-## Smoothness
-
-### scene.setSmoothness(segments)
-Set the smoothness level for curved shapes (circles, spheres, donuts). Default: 64 segments.
-
-```javascript
-scene.setSmoothness(32)   // Low quality, fewer polygons
-scene.setSmoothness(64)   // Default quality
-scene.setSmoothness(128)  // High quality, smoother curves
-```
-
-**Values:** 8 to 256 segments. Lower = angular/faceted, higher = smooth but more polygons.
-
-**Affected shapes:** `addCircle`, `addSphere`, `addDonut`
+Max 3 concurrent animations.
 
 ---
 
 ## Design System
 
-**Color Palette:**
-- Neutrals: `#E6E8EB` (primary), `#AAB2BD` (secondary), `#111318` (bg)
-- Accents: `#2D7FF9` (blue), `#F25C54` (red), `#F2C14E` (yellow), `#2FBF71` (green), `#B07CFF` (violet)
+Colors:
+- Neutrals: `#E6E8EB`, `#AAB2BD`, `#111318`
+- Accents: `#2D7FF9`, `#F25C54`, `#F2C14E`, `#2FBF71`, `#B07CFF`
 
-**Opacity Behavior:**
-- 2D shapes (circle, poly2d): affects fill only, outline 100%
-- 3D volumes (sphere, cylinder, etc.): affects entire volume
+Opacity:
+- 2D shapes: fill only, outline 100%
+- 3D volumes: entire shape
 
-**Parameter Reference:**
-- `slice`: Degrees for partial shapes (arc, sector, hemisphere). Like clock: 0 = 3 o'clock, 90 = 12 o'clock
-- `stretch`: Scale factors {x, y, z} for ellipse/ellipsoid (1 = no stretch)
-- `direction`: Unit vector {x, y, z} pointing which way shape faces
-- `rotation`: Degrees to spin around the facing direction
-- `thickness`: 0 = thin line, >0 = volumetric tube
-- `points`: Array of {x, y, z} vertices (polygons/lines) or centerline (cylinders)
+Limits: 50 objects, 100k polygons, 100 tube segments, 20 labels, 3 animations
 
 ---
 
-## Performance Budget
-
-Limits (inform LLM but don't block):
-- Max 50 objects
-- Max 100,000 polygons
-- Max 100 tube segments
-- Max 20 labels
-- Max 3 animations
-
----
-
-## JSON Output Format
-
-For BUILD intent, return:
+## JSON Output
 
 ```json
 {
-  "scene": {
-    "sceneCode": "scene.addAxes({...});\nscene.addLine({...});",
-    "objects": [
-      { "id": "axes", "type": "axes" },
-      { "id": "line", "type": "line" }
-    ],
-    "camera": { "position": [6, 4, 8], "target": [0, 0, 0] }
-  },
-  "comment": {
-    "markdown": "Explanation with \\(LaTeX\\)."
-  }
+  "scene": "scene.addAxes({...});\nscene.addLine({...});",
+  "camera": { "position": [6, 4, 8], "target": [0, 0, 0] }
 }
 ```
 
-**Rules:**
-- Use `{x,y,z}` for all coordinates, never `[x,y,z]`
-- No inline comments in sceneCode (system adds them)
-- Only use documented attributes
-- camera.position/target use arrays, coordinates use objects
-- Each BUILD replaces the ENTIRE scene - send **complete** scene code with **ALL** objects, do **not** send partial updates
+- Use `{x,y,z}` for coordinates, `[x,y,z]` for camera only
+- Avoid comments in scene
+- Each BUILD replaces entire scene

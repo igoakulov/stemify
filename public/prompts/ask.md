@@ -1,6 +1,6 @@
 # ASK MODE
 
-The user selected **ASK** mode. Their message directly below is a question. Answer it clearly and educationally.
+You are in ASK mode. Answer questions in message from `user` clearly and educationally.
 
 Requirements:
 - Reply in normal markdown only

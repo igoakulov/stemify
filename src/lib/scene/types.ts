@@ -12,6 +12,7 @@ export type AddPointConfig = {
   id: string;
   center: Vec3;
   color?: string;
+  selectable?: boolean;
 };
 
 export type AddLineConfig = {
@@ -30,6 +31,7 @@ export type AddLineConfig = {
   rotation?: number;
   color?: string;
   opacity?: number;
+  selectable?: boolean;
 };
 
 export type AddPoly2DConfig = {
@@ -39,6 +41,7 @@ export type AddPoly2DConfig = {
   opacity?: number;
   direction?: Vec3;
   rotation?: number;
+  selectable?: boolean;
 };
 
 export type AddCircleConfig = {
@@ -51,6 +54,7 @@ export type AddCircleConfig = {
   rotation?: number;
   color?: string;
   opacity?: number;
+  selectable?: boolean;
 };
 
 // 3D Primitives
@@ -64,6 +68,7 @@ export type AddSphereConfig = {
   rotation?: number;
   color?: string;
   opacity?: number;
+  selectable?: boolean;
 };
 
 export type AddCylinderConfig = {
@@ -75,6 +80,7 @@ export type AddCylinderConfig = {
   rotation?: number;
   color?: string;
   opacity?: number;
+  selectable?: boolean;
 };
 
 export type AddPoly3DConfig = {
@@ -84,6 +90,7 @@ export type AddPoly3DConfig = {
   opacity?: number;
   direction?: Vec3;
   rotation?: number;
+  selectable?: boolean;
 };
 
 export type AddDonutConfig = {
@@ -96,6 +103,7 @@ export type AddDonutConfig = {
   rotation?: number;
   color?: string;
   opacity?: number;
+  selectable?: boolean;
 };
 
 // Infrastructure
@@ -120,6 +128,7 @@ export type AddLabelConfig = {
   position: Vec3;
   color?: string;
   fontSizePx?: number;
+  selectable?: boolean;
 };
 
 export type AddGroupConfig = {
@@ -127,6 +136,7 @@ export type AddGroupConfig = {
   children: string[];
   direction?: Vec3;
   rotation?: number;
+  selectable?: boolean;
 };
 
 export type AddAnimationConfig = {
@@ -140,6 +150,7 @@ export type AddCustomMeshConfig = {
   color?: string;
   direction?: Vec3;
   rotation?: number;
+  selectable?: boolean;
 };
 
 export type AddTooltipConfig = {

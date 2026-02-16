@@ -87,6 +87,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     id,
     center,
     color,
+    selectable = true,
   }) => {
     const geometry = new THREE.SphereGeometry(0.05, 16, 12);
     const material = deps.template.materials.mesh_default.clone();
@@ -97,12 +98,13 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
 
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.copy(v3(get_snapped_center(center)));
+    mesh.userData = { id, selectable };
     deps.template.root.add(mesh);
 
     deps.registry.add({
       id,
       type: "point",
-    });
+    }, selectable, null);
 
     deps.registry.attach_mesh(id, mesh);
   };
@@ -116,6 +118,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     rotation = 0,
     color,
     opacity,
+    selectable = true,
   }) => {
     let point_array: Vec3[];
 
@@ -220,15 +223,18 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
       }
 
       deps.template.root.add(arrow_group);
+      arrow_group.userData = { id, selectable };
+      mesh.userData = { id, selectable };
       mesh = arrow_group;
     } else {
+      mesh.userData = { id, selectable };
       deps.template.root.add(mesh);
     }
 
     deps.registry.add({
       id,
       type: "line",
-    });
+    }, selectable, null);
 
     deps.registry.attach_mesh(id, mesh);
   };
@@ -240,6 +246,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     opacity,
     direction,
     rotation = 0,
+    selectable = true,
   }) => {
     // Apply grid snap to points
     const snapped_points = get_snapped_points(points);
@@ -283,11 +290,12 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     }
 
     deps.template.root.add(mesh);
+    mesh.userData = { id, selectable };
 
     deps.registry.add({
       id,
       type: "poly2d",
-    });
+    }, selectable, null);
 
     deps.registry.attach_mesh(id, mesh);
   };
@@ -302,6 +310,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     rotation = 0,
     color,
     opacity,
+    selectable = true,
   }) => {
     // Apply grid snap to center
     const snapped_center = get_snapped_center(center);
@@ -368,11 +377,12 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     }
 
     deps.template.root.add(mesh);
+    mesh.userData = { id, selectable };
 
     deps.registry.add({
       id,
       type: "circle",
-    });
+    }, selectable, null);
 
     deps.registry.attach_mesh(id, mesh);
   };
@@ -389,6 +399,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     rotation = 0,
     color,
     opacity,
+    selectable = true,
   }) => {
     // Apply grid snap to center
     const snapped_center = get_snapped_center(center);
@@ -424,11 +435,12 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     }
 
     deps.template.root.add(mesh);
+    mesh.userData = { id, selectable };
 
     deps.registry.add({
       id,
       type: "sphere",
-    });
+    }, selectable, null);
 
     deps.registry.attach_mesh(id, mesh);
   };
@@ -442,6 +454,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     rotation = 0,
     color,
     opacity,
+    selectable = true,
   }) => {
     // Apply grid snap to points
     const snapped_points = get_snapped_points(points);
@@ -492,11 +505,12 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     }
 
     deps.template.root.add(group);
+    group.userData = { id, selectable };
 
     deps.registry.add({
       id,
       type: "cylinder",
-    });
+    }, selectable, null);
 
     deps.registry.attach_mesh(id, group);
   };
@@ -508,6 +522,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     opacity,
     direction,
     rotation = 0,
+    selectable = true,
   }) => {
     // Apply grid snap to points
     const snapped_points = get_snapped_points(points);
@@ -616,11 +631,12 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     }
 
     deps.template.root.add(mesh);
+    mesh.userData = { id, selectable };
 
     deps.registry.add({
       id,
       type: "poly3d",
-    });
+    }, selectable, null);
 
     deps.registry.attach_mesh(id, mesh);
   };
@@ -635,6 +651,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     rotation = 0,
     color,
     opacity,
+    selectable = true,
   }) => {
     // Apply grid snap to center
     const snapped_center = get_snapped_center(center);
@@ -663,11 +680,12 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     mesh.rotateZ((rotation * Math.PI) / 180);
 
     deps.template.root.add(mesh);
+    mesh.userData = { id, selectable };
 
     deps.registry.add({
       id,
       type: "donut",
-    });
+    }, selectable, null);
 
     deps.registry.attach_mesh(id, mesh);
   };
@@ -681,20 +699,21 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     z,
     length,
     position,
-    selectable: _selectable,
+    selectable = false,
   } = {}) => {
     // Apply grid snap to position if provided
     const snapped_position = position ? get_snapped_center(position) : undefined;
     const axes = create_axes_group({ x, y, z, length, position: snapped_position });
     deps.template.root.add(axes);
+    axes.userData = { id, selectable };
 
     deps.registry.add({
       id,
       type: "axes",
-    });
+    }, selectable, null);
   };
 
-  const addLabel: SceneApi["addLabel"] = ({ id, text, position, color, fontSizePx }) => {
+  const addLabel: SceneApi["addLabel"] = ({ id, text, position, color, fontSizePx, selectable = true }) => {
     // Apply grid snap to position
     const snapped_position = get_snapped_center(position);
 
@@ -716,7 +735,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     const label = new CSS2DObject(div);
     label.position.copy(v3(snapped_position));
 
-    apply_label_style(label);
+    apply_label_style(label, id);
 
     if (color) {
       (label.element as HTMLElement).style.color = color;
@@ -729,11 +748,12 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     }
 
     deps.template.root.add(label);
+    label.userData = { id, selectable };
 
     deps.registry.add({
       id,
       type: "label",
-    });
+    }, selectable, null);
 
     deps.registry.attach_mesh(id, label);
   };
@@ -743,14 +763,18 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     children,
     direction,
     rotation = 0,
+    selectable = true,
   }) => {
     const group = new THREE.Group();
 
+    // Update registry to mark children as having this group as parent
     children.forEach((child_id) => {
       const child = deps.registry.get_mesh(child_id);
       if (child) {
         group.add(child);
       }
+      // Set parent reference in registry
+      deps.registry.set_parent(child_id, id);
     });
 
     // Apply direction and rotation to entire group
@@ -769,11 +793,12 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     }
 
     deps.template.root.add(group);
+    group.userData = { id, selectable };
 
     deps.registry.add({
       id,
       type: "group",
-    });
+    }, selectable, null);
 
     deps.registry.attach_mesh(id, group);
   };
@@ -812,6 +837,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     color,
     direction,
     rotation = 0,
+    selectable = true,
   }) => {
     const fn = new Function("THREE", createFn);
     const mesh = fn(THREE) as THREE.Mesh;
@@ -844,11 +870,12 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     }
 
     deps.template.root.add(mesh);
+    mesh.userData = { id, selectable };
 
     deps.registry.add({
       id,
       type: "custom",
-    });
+    }, selectable, null);
 
     deps.registry.attach_mesh(id, mesh);
   };

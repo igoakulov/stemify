@@ -6,6 +6,7 @@ STEMify is a local-first web application that transforms natural language descri
 
 - **Natural Language to 3D**: Describe physics simulations, mathematical concepts, or geometric shapes in plain English, and watch them come to life as interactive 3D scenes
 - **Conversational Editing**: Chat with an AI assistant to modify, extend, or explain your visualizations
+- **Redo**: 1-click redo of the scene if LLM returns invalid code
 - **Dual Mode Interface**:
   - **Ask Mode**: Get explanations and insights about your scenes
   - **Build Mode**: Direct the AI to modify and create new visualizations

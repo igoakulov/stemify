@@ -6,7 +6,7 @@ export type ChatMessage = {
   content: string;
   created_at: number;
   meta?: {
-    mode?: "ask" | "build";
+    mode?: "ask" | "build" | "fix";
     model_id?: string;
   };
 };

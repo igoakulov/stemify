@@ -48,6 +48,23 @@
   --radius-outer: 0.875rem; /* 14px - outer = inner (6px) + padding (8px) */
 }
 
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.css2d-label.label-hover,
+.css2d-label.label-selected {
+  border-color: #fbbf24 !important;
+}
+
+.css2d-label.label-selected {
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.4);
+}
+
 :root {
   /* STEMify Design Tokens - Corner Radius */
   /* Formula: outer_radius = inner_radius + padding */

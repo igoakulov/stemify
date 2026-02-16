@@ -1,5 +1,3 @@
-import type { ObjectMeta } from "@/lib/scene/types";
-
 export type CameraState = {
   position: [number, number, number];
   target: [number, number, number];
@@ -16,7 +14,6 @@ export type SavedScene = {
   createdAt: number;
   updatedAt: number;
   sceneCode: string;
-  objects: ObjectMeta[];
   camera?: CameraState;
   grid?: GridConfig;   // Per-scene grid settings
 };

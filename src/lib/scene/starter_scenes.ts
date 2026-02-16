@@ -10,10 +10,6 @@ export function get_starter_scenes(): SavedScene[] {
       createdAt: now,
       updatedAt: now,
       sceneCode: `
-// Layout: 4 quadrants with 2x2 spot formation per quadrant
-// Each spot is 3 units apart (radius 1 shapes, 1 unit gap)
-// Quadrant centers: Q1(-4.5,-4.5), Q2(-4.5,4.5), Q3(4.5,-4.5), Q4(4.5,4.5)
-// Spot offsets: TL(-1.5,-1.5), TR(1.5,-1.5), BL(-1.5,1.5), BR(1.5,1.5)
 scene.setSmoothness(128);
 scene.setGrid(0.5);
 
@@ -24,12 +20,7 @@ scene.addAxes({
   z: { start: -7, end: 7 }
 });
 
-// ============================================
-// QUADRANT 1: 2D Composites (centered at -4.5, 4.5)
-// ============================================
-
-// House - TR spot (centered at -3, 6)
-scene.addPoly2D({
+scene.addPoly2({
   id: "house_body",
   points: [
     { x: -4, y: 0, z: 3 },
@@ -57,8 +48,6 @@ scene.addGroup({
   children: ["house_body", "house_roof"],
 });
 
-// Car side profile - BL spot (centered at -3, 6)
-// Lower body
 scene.addPoly2D({
   id: "car_lower",
   points: [
@@ -70,7 +59,6 @@ scene.addPoly2D({
   color: "#EF4444"
 });
 
-// Upper body (cabin)
 scene.addPoly2D({
   id: "car_upper",
   points: [
@@ -82,7 +70,6 @@ scene.addPoly2D({
   color: "#EF4444"
 });
 
-// Wheels
 scene.addCircle({
   id: "wheel_back",
   center: { x: -6, y: 0.05, z: 6.5 },
@@ -104,11 +91,6 @@ scene.addGroup({
   children: ["car_lower", "car_upper", "wheel_back", "wheel_front"],
 });
 
-// ============================================
-// QUADRANT 2: 2D Primitives (centered at -4.5, -4.5)
-// ============================================
-
-// Right triangle - TR spot (centered at -3, 6)
 scene.addPoly2D({
   id: "triangle",
   points: [
@@ -119,7 +101,6 @@ scene.addPoly2D({
   color: "#2FBF71"
 });
 
-// Disc - TL spot
 scene.addCircle({
   id: "disc",
   center: { x: -6, y: 0.01, z: -6 },
@@ -128,7 +109,6 @@ scene.addCircle({
   color: "#2D7FF9"
 });
 
-// Ring - BL spot
 scene.addCircle({
   id: "ring",
   center: { x: -6, y: 0, z: -3 },
@@ -138,7 +118,6 @@ scene.addCircle({
   color: "#B07CFF"
 });
 
-// Wavy line - BR spot (centered at -3, -6)
 scene.addLine({
   id: "wavy_line",
   points: {
@@ -153,11 +132,6 @@ scene.addLine({
   color: "#F2C14E"
 });
 
-// ============================================
-// QUADRANT 3: 3D Primitives (centered at 4.5, -4.5)
-// ============================================
-
-// Sphere - TL spot
 scene.addSphere({
   id: "sphere",
   center: { x: 3, y: 1, z: -6 },
@@ -165,7 +139,6 @@ scene.addSphere({
   color: "#F25C54"
 });
 
-// Hourglass - TR spot
 scene.addCylinder({
   id: "hourglass",
   points: [
@@ -177,7 +150,6 @@ scene.addCylinder({
   color: "#E6E8EB"
 });
 
-// Cone - BL spot
 scene.addCylinder({
   id: "cone",
   points: [{ x: 3, y: 0.01, z: -3 }, { x: 3, y: 2, z: -3 }],
@@ -185,7 +157,6 @@ scene.addCylinder({
   color: "#2D7FF9"
 });
 
-// Pyramid - BR spot (2x2 base, Giza proportions ~0.7 height-to-base)
 scene.addPoly3D({
   id: "pyramid",
   points: [
@@ -198,11 +169,6 @@ scene.addPoly3D({
   color: "#8b5cf6"
 });
 
-// ============================================
-// QUADRANT 4: 3D Composites (centered at 4.5, 4.5)
-// ============================================
-
-// Saturn - TL spot (composite, not a primitive)
 scene.addSphere({
   id: "saturn_planet",
   center: { x: 3, y: 1, z: 3 },
@@ -225,7 +191,6 @@ scene.addGroup({
   children: ["saturn_planet", "saturn_rings"],
 });
 
-// Icosahedron - TR spot
 scene.addCustomMesh({
   id: "icosahedron",
   createFn: \`
@@ -241,7 +206,6 @@ scene.addCustomMesh({
   \`
 });
 
-// Torus knot - BR spot
 scene.addCustomMesh({
   id: "torus_knot",
   createFn: \`
@@ -256,13 +220,12 @@ scene.addCustomMesh({
   \`
 });
 
-// Constant rotation for green torus knot and purple icosahedron
 scene.addAnimation({
   id: "rotate_shapes",
   updateFunction: \`
     const torusKnot = scene.getObject("torus_knot");
     const icosahedron = scene.getObject("icosahedron");
-    
+
     if (torusKnot) {
       torusKnot.rotation.y = elapsed * 0.5;
       torusKnot.rotation.x = elapsed * 0.2;
@@ -274,29 +237,26 @@ scene.addAnimation({
   \`
 });
 
-// All shapes appear by scaling from 0 to 100% over 1 second
 scene.addAnimation({
   id: "appear",
   updateFunction: \`
     const t = Math.min(elapsed / 1.0, 1);
     const scale = 1 - Math.pow(1 - t, 3);
-    
-    // Scale individual objects (direct children of scene root)
+
     const directObjects = [
       "triangle", "disc", "ring", "wavy_line",
       "sphere", "pyramid", "icosahedron", "torus_knot"
     ];
-    
-    // Scale groups (scale from origin)
+
     const groups = [
       "car", "house", "saturn", "hourglass", "cone"
     ];
-    
+
     directObjects.forEach(id => {
       const obj = scene.getObject(id);
       if (obj) obj.scale.set(scale, scale, scale);
     });
-    
+
     groups.forEach(id => {
       const obj = scene.getObject(id);
       if (obj) obj.scale.set(scale, scale, scale);
@@ -304,22 +264,6 @@ scene.addAnimation({
   \`
 });
 `,
-      objects: [
-        { id: "axes", type: "axes" },
-        { id: "triangle", type: "poly2d" },
-        { id: "disc", type: "circle" },
-        { id: "ring", type: "circle" },
-        { id: "wavy_line", type: "line" },
-        { id: "car", type: "group" },
-        { id: "house", type: "group" },
-        { id: "sphere", type: "sphere" },
-        { id: "hourglass", type: "cylinder" },
-        { id: "cone", type: "cylinder" },
-        { id: "pyramid", type: "poly3d" },
-        { id: "saturn", type: "group" },
-        { id: "icosahedron", type: "custom" },
-        { id: "torus_knot", type: "custom" },
-      ],
     },
     {
       id: "starter_vectors",
@@ -330,7 +274,6 @@ scene.addAnimation({
 scene.addAxes({ id: "axes", length: 5 });
 scene.setGrid(0.5);
 
-// Vector v1
 scene.addLine({
   id: "v1",
   points: [{ x: 0, y: 0, z: 0 }, { x: 2, y: 1.1, z: 1.4 }],
@@ -339,7 +282,6 @@ scene.addLine({
   color: "#F25C54"
 });
 
-// Vector v2
 scene.addLine({
   id: "v2",
   points: [{ x: 0, y: 0, z: 0 }, { x: 1, y: 1.9, z: 0.4 }],
@@ -348,7 +290,6 @@ scene.addLine({
   color: "#2D7FF9"
 });
 
-// Sum vector
 scene.addLine({
   id: "v_sum",
   points: [{ x: 0, y: 0, z: 0 }, { x: 3, y: 3, z: 1.8 }],
@@ -357,7 +298,15 @@ scene.addLine({
   color: "#2FBF71"
 });
 
-// Parallelogram construction
+scene.addTooltip({
+  id: "v_sum",
+  title: "Vector Addition",
+  properties: [
+    { label: "Formula", value: "v1 + v2 = v_sum" },
+    { label: "Components", value: "(3, 3, 1.8)" }
+  ]
+});
+
 scene.addLine({
   id: "parallelogram_1",
   points: [{ x: 2, y: 1.1, z: 1.4 }, { x: 3, y: 3, z: 1.8 }],
@@ -372,19 +321,10 @@ scene.addLine({
   color: "#AAB2BD"
 });
 
-// Labels
-scene.addLabel({ id: "label_v1", text: "v₁", position: { x: 2.05, y: 1.1, z: 1.4 }, color: "#F25C54" });
-scene.addLabel({ id: "label_v2", text: "v₂", position: { x: 1.05, y: 1.9, z: 0.4 }, color: "#2D7FF9" });
-scene.addLabel({ id: "label_sum", text: "v₁ + v₂", position: { x: 3.05, y: 3, z: 1.8 }, color: "#2FBF71" });
+scene.addLabel({ id: "label_v1", text: "v1", position: { x: 2.05, y: 1.1, z: 1.4 }, color: "#F25C54" });
+scene.addLabel({ id: "label_v2", text: "v2", position: { x: 1.05, y: 1.9, z: 0.4 }, color: "#2D7FF9" });
+scene.addLabel({ id: "label_sum", text: "v1 + v2", position: { x: 3.05, y: 3, z: 1.8 }, color: "#2FBF71" });
 `,
-      objects: [
-        { id: "axes", type: "axes" },
-        { id: "v1", type: "line" },
-        { id: "v2", type: "line" },
-        { id: "v_sum", type: "line" },
-        { id: "parallelogram_1", type: "line" },
-        { id: "parallelogram_2", type: "line" },
-      ],
     },
     {
       id: "starter_distribution",
@@ -400,7 +340,6 @@ scene.addAxes({
 });
 scene.setGrid(0.1);
 
-// Normal distribution curve
 scene.addLine({
   id: "normal_curve",
   points: {
@@ -415,7 +354,16 @@ scene.addLine({
   color: "#2D7FF9"
 });
 
-// Mean line at x=0 - extended from ground up
+scene.addTooltip({
+  id: "normal_curve",
+  title: "Normal Distribution",
+  properties: [
+    { label: "1 sigma", value: "68.2% of data" },
+    { label: "2 sigma", value: "95.4% of data" },
+    { label: "3 sigma", value: "99.7% of data" }
+  ]
+});
+
 scene.addLine({
   id: "mean_line",
   points: [{ x: 0, y: 0, z: 0 }, { x: 0, y: 3.5, z: 0 }],
@@ -423,41 +371,23 @@ scene.addLine({
   color: "#F25C54"
 });
 
-// Peak point
 scene.addPoint({ id: "peak", center: { x: 0, y: 3.19, z: 0 }, color: "#F25C54" });
 
-// 1σ markers
 scene.addLine({ id: "sigma_1_neg", points: [{ x: -1, y: 0, z: 0 }, { x: -1, y: 1.94, z: 0 }], thickness: 0.02, color: "#F2C14E" });
 scene.addLine({ id: "sigma_1_pos", points: [{ x: 1, y: 0, z: 0 }, { x: 1, y: 1.94, z: 0 }], thickness: 0.02, color: "#F2C14E" });
 scene.addPoint({ id: "sigma_1_neg_point", center: { x: -1, y: 1.94, z: 0 }, color: "#F2C14E" });
 scene.addPoint({ id: "sigma_1_pos_point", center: { x: 1, y: 1.94, z: 0 }, color: "#F2C14E" });
 
-// 2σ markers - exactly at curve height (~0.43)
 scene.addLine({ id: "sigma_2_neg", points: [{ x: -2, y: 0, z: 0 }, { x: -2, y: 0.43, z: 0 }], thickness: 0.02, color: "#2FBF71" });
 scene.addLine({ id: "sigma_2_pos", points: [{ x: 2, y: 0, z: 0 }, { x: 2, y: 0.43, z: 0 }], thickness: 0.02, color: "#2FBF71" });
 scene.addPoint({ id: "sigma_2_neg_point", center: { x: -2, y: 0.43, z: 0 }, color: "#2FBF71" });
 scene.addPoint({ id: "sigma_2_pos_point", center: { x: 2, y: 0.43, z: 0 }, color: "#2FBF71" });
 
-// Labels
-scene.addLabel({ id: "mu_label", text: "μ = 0", position: { x: 0.2, y: 3.6, z: 0 }, color: "#E6E8EB" });
-scene.addLabel({ id: "sigma_1_label", text: "±1σ", position: { x: 1.2, y: 2.2, z: 0 }, color: "#F2C14E" });
-scene.addLabel({ id: "sigma_2_label", text: "±2σ", position: { x: 2.2, y: 0.8, z: 0 }, color: "#2FBF71" });
+scene.addLabel({ id: "mu_label", text: "mu = 0", position: { x: 0.2, y: 3.6, z: 0 }, color: "#E6E8EB" });
+scene.addLabel({ id: "sigma_1_label", text: "1 sigma", position: { x: 1.2, y: 2.2, z: 0 }, color: "#F2C14E" });
+scene.addLabel({ id: "sigma_2_label", text: "2 sigma", position: { x: 2.2, y: 0.8, z: 0 }, color: "#2FBF71" });
 scene.addLabel({ id: "pdf_label", text: "PDF = Probability Density Function", position: { x: -3.5, y: 3.8, z: 0 }, color: "#AAB2BD" });
 `,
-      objects: [
-        { id: "axes", type: "axes" },
-        { id: "normal_curve", type: "line" },
-        { id: "mean_line", type: "line" },
-        { id: "peak", type: "point" },
-        { id: "sigma_1_neg", type: "line" },
-        { id: "sigma_1_pos", type: "line" },
-        { id: "sigma_1_neg_point", type: "point" },
-        { id: "sigma_1_pos_point", type: "point" },
-        { id: "sigma_2_neg", type: "line" },
-        { id: "sigma_2_pos", type: "line" },
-        { id: "sigma_2_neg_point", type: "point" },
-        { id: "sigma_2_pos_point", type: "point" },
-      ],
     },
   ];
 }

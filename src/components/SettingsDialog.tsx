@@ -94,6 +94,7 @@ export function SettingsDialog() {
   }, []);
 
   const [api_key_input, set_api_key_input] = useState("");
+  const [api_key_message, set_api_key_message] = useState("");
 
   const stored_api_key = useMemo(() => {
     if (!is_mounted) return "";
@@ -123,6 +124,7 @@ export function SettingsDialog() {
       fix: "",
     },
   );
+  const [prompt_message, set_prompt_message] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -185,11 +187,15 @@ export function SettingsDialog() {
     if (trimmed) {
       window.dispatchEvent(new Event("stemify:api-key-saved"));
     }
+    set_api_key_message("Saved!");
+    setTimeout(() => set_api_key_message(""), 1500);
   };
 
   const on_clear_key = () => {
     clear_openrouter_api_key();
     set_api_key_input("");
+    set_api_key_message("Cleared!");
+    setTimeout(() => set_api_key_message(""), 1500);
   };
 
   const on_reset_prompt = (pid: PromptId) => {
@@ -202,6 +208,8 @@ export function SettingsDialog() {
       .then((md) => {
         set_prompt_drafts((prev) => ({ ...prev, [pid]: md }));
         set_prompt_errors((prev) => ({ ...prev, [pid]: "" }));
+        set_prompt_message("Reset!");
+        setTimeout(() => set_prompt_message(""), 1500);
       })
       .catch((e) => {
         set_prompt_errors((prev) => ({
@@ -222,6 +230,8 @@ export function SettingsDialog() {
     }
     save_prompt_override(pid, prompt_drafts[pid]);
     set_prompt_errors((prev) => ({ ...prev, [pid]: "" }));
+    set_prompt_message("Saved!");
+    setTimeout(() => set_prompt_message(""), 1500);
   };
 
   if (!is_mounted) return null;
@@ -246,7 +256,7 @@ export function SettingsDialog() {
             <div className="text-xs text-muted-foreground">
               Local-only: your key is stored in your browser and never logged.
             </div>
-            <div className="flex gap-2 pt-1">
+            <div className="flex items-center gap-2 pt-1">
               <Button type="button" size="sm" onClick={on_save_key}>
                 Save
               </Button>
@@ -258,6 +268,11 @@ export function SettingsDialog() {
               >
                 Clear
               </Button>
+              {api_key_message && (
+                <span className="text-sm text-green-600 animate-in fade-in">
+                  {api_key_message}
+                </span>
+              )}
             </div>
           </div>
 
@@ -311,22 +326,29 @@ export function SettingsDialog() {
                   {prompt_errors[active_prompt]}
                 </div>
               )}
-              <div className="flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => on_reset_prompt(active_prompt)}
-                >
-                  Reset
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => on_save_prompt(active_prompt)}
-                >
-                  Save
-                </Button>
+              <div className="flex items-center gap-2">
+                {prompt_message && (
+                  <span className="text-sm text-green-600 animate-in fade-in">
+                    {prompt_message}
+                  </span>
+                )}
+                <div className="flex gap-2 ml-auto">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => on_reset_prompt(active_prompt)}
+                  >
+                    Reset
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => on_save_prompt(active_prompt)}
+                  >
+                    Save
+                  </Button>
+                </div>
               </div>
             </div>
           </div>

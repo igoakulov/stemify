@@ -670,7 +670,7 @@ export function ChatPanel(props: ChatPanelProps) {
           on_send_user_message={on_send_user_message}
           on_first_assistant_response={on_first_assistant_response}
         >
-          <Thread show_recent_scenes={!props.active_scene} />
+          <Thread show_recent_scenes={!props.active_scene} thread_id={thread_id} />
         </ChatRuntimeProvider>
       </div>
     </div>

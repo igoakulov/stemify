@@ -10,7 +10,7 @@ import {
   useSceneEditorStore,
   set_validation_error,
 } from "@/lib/scene/editor_store";
-import { pretty_print_scene_code } from "@/lib/scene/comments";
+import { pretty_print_scene_code, format_scene_code, remove_comments } from "@/lib/scene/comments";
 import { validate_scene_code } from "@/lib/chat/scene_apply";
 
 type SceneEditorPanelProps = {
@@ -51,22 +51,43 @@ export function SceneEditorPanel({
 
   const isObjectMode = selectedObjectId !== null;
 
-  const [localCode, setLocalCode] = useState(fullSceneCode);
-
-  // Auto-scroll breadcrumbs to selected item when it changes
-  useEffect(() => {
-    if (breadcrumbsRef.current && selectedObjectId) {
-      const container = breadcrumbsRef.current;
-      const selectedButton = container.querySelector(`button[data-id="${selectedObjectId}"]`) as HTMLButtonElement;
-      if (selectedButton) {
-        selectedButton.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-      }
+  // Initialize localCode with pretty-printed code on mount
+  const [localCode, setLocalCode] = useState(() => {
+    if (isObjectMode) {
+      const objectCode = extractObjectCode(fullSceneCode, selectedObjectId!);
+      const method = extractMethodName(objectCode);
+      return pretty_print_scene_code(objectCode, method);
     }
-  }, [breadcrumbs, selectedObjectId]);
+    return pretty_print_scene_code(fullSceneCode);
+  });
 
+  // Track last synced code to detect external changes
+  const lastSyncedCodeRef = useRef(fullSceneCode);
+
+  // Sync when fullSceneCode changes externally (e.g., code applied from chat)
+  // Re-inject comments since it's a new scene
   useEffect(() => {
-    setLocalCode(fullSceneCode);
-  }, [fullSceneCode]);
+    if (fullSceneCode !== lastSyncedCodeRef.current) {
+      lastSyncedCodeRef.current = fullSceneCode;
+      
+      // Strip existing comments first to prevent stacking
+      const cleanedCode = remove_comments(fullSceneCode);
+      
+      let newCode: string;
+      if (isObjectMode && selectedObjectId) {
+        const objectCode = extractObjectCode(cleanedCode, selectedObjectId);
+        const method = extractMethodName(objectCode);
+        newCode = pretty_print_scene_code(objectCode, method);
+      } else {
+        newCode = pretty_print_scene_code(cleanedCode);
+      }
+      
+      // Use raf to avoid synchronous setState in effect
+      window.requestAnimationFrame(() => {
+        setLocalCode(newCode);
+      });
+    }
+  }, [fullSceneCode, isObjectMode, selectedObjectId]);
 
   const validateAndApply = useCallback(
     (code: string) => {
@@ -84,8 +105,14 @@ export function SceneEditorPanel({
       }
 
       set_validation_error(null);
-      onSceneCodeChange(code);
-      onApplySceneCode?.(code);
+      // Format code after successful validation (no comment injection)
+      const formattedCode = format_scene_code(code);
+      setLocalCode(formattedCode);
+      
+      // Strip comments before saving to prevent stacking
+      const cleanCode = remove_comments(formattedCode);
+      onSceneCodeChange(cleanCode);
+      onApplySceneCode?.(cleanCode);
     },
     [onSceneCodeChange, onApplySceneCode]
   );
@@ -114,17 +141,24 @@ export function SceneEditorPanel({
   }, []);
 
   const handleCopy = useCallback(async () => {
-    const code = isObjectMode && selectedObjectId
-      ? extractObjectCode(localCode, selectedObjectId)
-      : localCode;
+    let codeToCopy: string;
+    if (isObjectMode && selectedObjectId) {
+      const objectCode = extractObjectCode(localCode, selectedObjectId);
+      const method = extractMethodName(objectCode);
+      codeToCopy = pretty_print_scene_code(objectCode, method);
+    } else {
+      codeToCopy = pretty_print_scene_code(localCode);
+    }
 
-    await navigator.clipboard.writeText(code);
+    await navigator.clipboard.writeText(codeToCopy);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }, [isObjectMode, selectedObjectId, localCode]);
 
   // Calculate line offset and filtered code for object view
-  const { displayCode, lineNumberOffset } = useMemo(() => {
+  // Note: localCode already has comments injected on initial load via useState initializer
+  // After that, it's raw code (user edits) or formatted code (after validation)
+  const displayCode = useMemo(() => {
     if (isObjectMode && selectedObjectId) {
       const objectCode = extractObjectCode(localCode, selectedObjectId);
       if (objectCode) {
@@ -144,9 +178,8 @@ export function SceneEditorPanel({
           }
         }
         
-        const method = extractMethodName(objectCode);
         return {
-          displayCode: pretty_print_scene_code(objectCode, method),
+          displayCode: objectCode,
           lineNumberOffset: startIdx >= 0 ? startIdx : 0,
         };
       }
@@ -154,7 +187,7 @@ export function SceneEditorPanel({
     
     // Scene view - show all code
     return {
-      displayCode: pretty_print_scene_code(localCode),
+      displayCode: localCode,
       lineNumberOffset: 0,
     };
   }, [isObjectMode, selectedObjectId, localCode]);
@@ -237,12 +270,12 @@ export function SceneEditorPanel({
           </div>
         ) : (
           <SceneCodeEditor
-            value={displayCode}
+            value={displayCode.displayCode}
             onChange={handleCodeChange}
             error={validationError}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
-            lineNumberOffset={lineNumberOffset}
+            lineNumberOffset={displayCode.lineNumberOffset}
           />
         )}
         

@@ -401,15 +401,11 @@ Limits: 50 objects, 100k polygons, 100 tube segments, 20 labels, 3 animations
 
 ---
 
-## JSON Output
+## Output
 
-```json
-{
-  "scene": "scene.addAxes({...});\nscene.addLine({...});",
-  "camera": { "position": [6, 4, 8], "target": [0, 0, 0] }
-}
-```
+Response format depends on current mode:
+- **BUILD mode**: Return JSON with scene code string and optional camera object
+- **FIX mode**: Return corrected JSON following BUILD format
+- **ASK mode**: Return human-readable markdown with standard code blocks
 
-- Use `{x,y,z}` for coordinates, `[x,y,z]` for camera only
-- Avoid comments in scene
-- Each BUILD replaces entire scene
+See respective mode prompts for complete format specifications.

@@ -13,11 +13,10 @@ import { useAui } from "@assistant-ui/store";
 import { ArrowDownIcon, ArrowUp, RotateCcwIcon, Square } from "lucide-react";
 import { useEffect, useRef, useState, type FC } from "react";
 
-import { MarkdownText, CodeHeader } from "@/components/assistant-ui/markdown-text";
+import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { ChatStatusBanner } from "@/components/chat/ChatStatusBanner";
 import { RecentScenes } from "@/components/chat/RecentScenes";
 import { OpenRouterModelSelector } from "@/components/openrouter/OpenRouterModelSelector";
-import { is_fix_mode } from "@/lib/chat/banner";
 import { Button } from "@/components/ui/button";
 import { KeyboardShortcut } from "@/components/ui/keyboard-shortcut";
 import { load_chat_mode, save_chat_mode, type ChatMode } from "@/lib/chat/mode";
@@ -37,9 +36,10 @@ const SCROLLBAR_STYLES = (
 
 export type ThreadProps = {
   show_recent_scenes?: boolean;
+  thread_id?: string | null;
 };
 
-export const Thread: FC<ThreadProps> = ({ show_recent_scenes }) => {
+export const Thread: FC<ThreadProps> = ({ show_recent_scenes, thread_id }) => {
   const viewport_ref = useRef<HTMLDivElement>(null);
   useChatPrerequisites();
 
@@ -47,7 +47,10 @@ export const Thread: FC<ThreadProps> = ({ show_recent_scenes }) => {
     <>
       {SCROLLBAR_STYLES}
       <ThreadPrimitive.Root className="relative flex h-full min-h-0 flex-col">
-        <ThreadPrimitive.Viewport ref={viewport_ref} className="relative flex min-h-0 flex-1 flex-col overflow-y-scroll px-4 pt-4 chat-scroll-viewport">
+        <ThreadPrimitive.Viewport
+          ref={viewport_ref}
+          className="relative flex min-h-0 flex-1 flex-col overflow-y-scroll px-4 pt-4 chat-scroll-viewport"
+        >
           <AuiIf condition={({ thread }) => thread.isEmpty}>
             {!show_recent_scenes && (
               <div className="mx-auto my-auto max-w-md text-center">
@@ -76,7 +79,7 @@ export const Thread: FC<ThreadProps> = ({ show_recent_scenes }) => {
         )}
 
         <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto flex w-full max-w-2xl flex-col gap-4 overflow-visible rounded-t-3xl bg-zinc-950/90 px-4 pb-4 pt-2 backdrop-blur">
-          <ThreadScrollToBottom viewportRef={viewport_ref} />
+          <ThreadScrollToBottom viewportRef={viewport_ref} thread_id={thread_id} />
           <ChatStatusBanner />
           <Composer />
         </ThreadPrimitive.ViewportFooter>
@@ -85,12 +88,18 @@ export const Thread: FC<ThreadProps> = ({ show_recent_scenes }) => {
   );
 };
 
-const ThreadScrollToBottom: FC<{ viewportRef: React.RefObject<HTMLDivElement | null> }> = ({ viewportRef }) => {
+const ThreadScrollToBottom: FC<{
+  viewportRef: React.RefObject<HTMLDivElement | null>;
+  thread_id?: string | null;
+}> = (props) => {
+  const { viewportRef, thread_id } = props;
   const [show_button, set_show_button] = useState(false);
 
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
+
+    viewport.scrollTop = viewport.scrollHeight;
 
     const check_scroll = () => {
       const { scrollTop, scrollHeight, clientHeight } = viewport;
@@ -101,7 +110,7 @@ const ThreadScrollToBottom: FC<{ viewportRef: React.RefObject<HTMLDivElement | n
     check_scroll();
     viewport.addEventListener("scroll", check_scroll);
     return () => viewport.removeEventListener("scroll", check_scroll);
-  }, [viewportRef]);
+  }, [viewportRef, thread_id]);
 
   if (!show_button) return null;
 
@@ -171,9 +180,15 @@ const Composer: FC = () => {
       }, 50);
     };
 
-    window.addEventListener("stemify:model-selector-closed", handle_model_selector_closed);
+    window.addEventListener(
+      "stemify:model-selector-closed",
+      handle_model_selector_closed,
+    );
     return () => {
-      window.removeEventListener("stemify:model-selector-closed", handle_model_selector_closed);
+      window.removeEventListener(
+        "stemify:model-selector-closed",
+        handle_model_selector_closed,
+      );
     };
   }, []);
 
@@ -206,53 +221,53 @@ const Composer: FC = () => {
       onSubmit={() => {
         aui.composer().setRunConfig({ custom: { stemify_mode: mode } });
       }}
-      >
-        <div ref={composer_ref}>
-          <ComposerPrimitive.Input
-            ref={input_ref}
-            placeholder={placeholder}
-            onFocus={() => set_is_focused(true)}
-            onBlur={() => set_is_focused(false)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                e.preventDefault();
-                input_ref.current?.blur();
-              }
-              if (
-                e.key === "Tab" &&
-                !e.shiftKey &&
-                !e.altKey &&
-                !e.ctrlKey &&
-                !e.metaKey
-              ) {
-                e.preventDefault();
-                trigger_mode_toggle_feedback();
-                toggle_mode();
-              }
-            }}
-            className="mb-2 min-h-10 w-full resize-none bg-transparent px-2 text-sm text-primary outline-none placeholder:text-placeholder"
-            rows={1}
-          />
+    >
+      <div ref={composer_ref}>
+        <ComposerPrimitive.Input
+          ref={input_ref}
+          placeholder={placeholder}
+          onFocus={() => set_is_focused(true)}
+          onBlur={() => set_is_focused(false)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              input_ref.current?.blur();
+            }
+            if (
+              e.key === "Tab" &&
+              !e.shiftKey &&
+              !e.altKey &&
+              !e.ctrlKey &&
+              !e.metaKey
+            ) {
+              e.preventDefault();
+              trigger_mode_toggle_feedback();
+              toggle_mode();
+            }
+          }}
+          className="mb-2 min-h-10 w-full max-h-40 resize-none overflow-y-auto bg-transparent px-2 text-sm text-primary outline-none placeholder:text-placeholder"
+          rows={1}
+        />
 
-          <div className="flex items-center gap-2">
-            <div className="flex items-center">
-              <OpenRouterModelSelector />
-            </div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center">
+            <OpenRouterModelSelector />
+          </div>
 
-            <div className="ml-auto flex items-center gap-2">
-              <ModeToggle
-                mode={mode}
-                onToggle={toggle_mode}
-                isInputFocused={is_focused}
-                inputRef={input_ref}
-                isActive={is_mode_toggle_active}
-                onTriggerFeedback={trigger_mode_toggle_feedback}
-                showKeyboardShortcut={show_keyboard_shortcut}
-              />
-            </div>
+          <div className="ml-auto flex items-center gap-2">
+            <ModeToggle
+              mode={mode}
+              onToggle={toggle_mode}
+              isInputFocused={is_focused}
+              inputRef={input_ref}
+              isActive={is_mode_toggle_active}
+              onTriggerFeedback={trigger_mode_toggle_feedback}
+              showKeyboardShortcut={show_keyboard_shortcut}
+            />
           </div>
         </div>
-      </ComposerPrimitive.Root>
+      </div>
+    </ComposerPrimitive.Root>
   );
 };
 
@@ -310,14 +325,18 @@ const ModeToggle: FC<{
             className="h-1 w-1 rounded-full transition-all duration-200 group-hover:scale-125"
             style={{
               backgroundColor:
-                mode === "ask" ? "#f97316" : "rgba(255,255,255,0.3)",
+                mode === "ask"
+                  ? "var(--accent-primary)"
+                  : "rgba(255,255,255,0.3)",
             }}
           />
           <div
             className="h-1 w-1 rounded-full transition-all duration-200 group-hover:scale-125"
             style={{
               backgroundColor:
-                mode === "build" ? "#f97316" : "rgba(255,255,255,0.3)",
+                mode === "build"
+                  ? "var(--accent-primary)"
+                  : "rgba(255,255,255,0.3)",
             }}
           />
         </div>
@@ -329,7 +348,7 @@ const ModeToggle: FC<{
             type="submit"
             size="sm"
             className="h-8 min-w-8 gap-2 px-3 text-xs font-semibold uppercase tracking-wide border-0 shrink-0 justify-between cursor-pointer rounded-lg"
-            style={{ backgroundColor: "#f97316", color: "white" }}
+            style={{ backgroundColor: "var(--accent-primary)", color: "white" }}
           >
             <span className="text-left">{active_label}</span>
             <ArrowUp className="h-3.5 w-3.5 shrink-0" />
@@ -343,7 +362,7 @@ const ModeToggle: FC<{
             type="button"
             size="sm"
             className="h-8 min-w-8 gap-2 px-3 text-xs font-semibold uppercase tracking-wide border-0 shrink-0 justify-between cursor-pointer rounded-lg"
-            style={{ backgroundColor: "#f97316", color: "white" }}
+            style={{ backgroundColor: "var(--accent-primary)", color: "white" }}
           >
             <span className="text-left">Stop</span>
             <Square className="h-3.5 w-3.5 shrink-0" />
@@ -395,7 +414,7 @@ const UserMessage: FC = () => {
     >
       <div className="px-2">
         <div className="group">
-          <div className="ml-auto w-fit max-w-[85%] rounded-2xl bg-white/10 px-4 py-2 text-sm text-primary">
+          <div className="ml-auto max-w-[85%] rounded-2xl bg-white/10 px-4 py-2 text-sm text-primary break-words">
             <MessagePrimitive.Parts />
           </div>
           {show_meta && (
@@ -413,61 +432,33 @@ const UserMessage: FC = () => {
   );
 };
 
-// Custom Text component that wraps build mode JSON in code blocks
-const AssistantText: FC = () => {
-  const mode = useMessage(
-    (m) => m.metadata?.custom?.stemify_mode as "ask" | "build" | undefined,
-  );
-  const content = useMessage((m) => m.content as unknown as Array<{ type: string; text: string }> | undefined);
-  
-  // If in build mode and content looks like JSON, wrap it in a code block
-  if (mode === "build" && content && content.length > 0) {
-    const fullText = content[0]?.text || "";
-    
-    // Extract JSON code portion (between ```json and ``` fences)
-    const codeBlockMatch = fullText.match(/```json\n([\s\S]*?)\n```/);
-    const jsonText = codeBlockMatch ? codeBlockMatch[1].trim() : fullText.split(/\n\n/)[0].trim();
-    
-    // Check if this is JSON content
-    const isJson = fullText.includes("```json") || fullText.trim().startsWith("{");
-    
-    if (isJson) {
-      return (
-        <div className="aui-md select-text">
-          <CodeHeader language="json" code={jsonText} />
-          <pre className="overflow-x-auto rounded-b-2xl border border-white/5 border-t-0 bg-white/3 p-3 text-xs leading-relaxed select-text">
-            <code className="language-json">{jsonText}</code>
-          </pre>
-        </div>
-      );
-    }
-  }
-  
-  // Default: use regular MarkdownText
-  return <MarkdownText />;
-};
-
 const AssistantMessage: FC = () => {
   const mode = useMessage(
-    (m) => m.metadata?.custom?.stemify_mode as "ask" | "build" | undefined,
+    (m) =>
+      m.metadata?.custom?.stemify_mode as "ask" | "build" | "fix" | undefined,
   );
   const model_id = useMessage(
     (m) => m.metadata?.custom?.model_id as string | undefined,
   );
   const created_at = useMessage((m) => m.createdAt as Date | undefined);
-  const content = useMessage((m) => m.content as unknown as Array<{ type: string; text: string }> | undefined);
+  const content = useMessage(
+    (m) =>
+      m.content as unknown as Array<{ type: string; text: string }> | undefined,
+  );
+
+  const has_content =
+    content &&
+    (content.length > 1 ||
+      (content.length === 1 &&
+        (content[0].type !== "text" || content[0].text.length > 0)));
 
   const model_name = extract_model_name(model_id);
   const time_str = created_at
     ? format_message_time(created_at.getTime())
     : null;
 
-  const show_meta = mode && (mode === "ask" || mode === "build");
-
-  const is_build_json = mode === "build" && content && content.length > 0 &&
-    content[0]?.text?.trim().startsWith("{") && !content[0]?.text?.includes("```");
-
-  const has_content = content && (content.length > 1 || (content.length === 1 && (content[0].type !== "text" || content[0].text.length > 0)));
+  const show_meta =
+    mode && (mode === "ask" || mode === "build" || mode === "fix");
 
   return (
     <MessagePrimitive.Root
@@ -477,27 +468,32 @@ const AssistantMessage: FC = () => {
       {!has_content ? (
         <div className="flex items-center gap-1.5 py-1 pl-4">
           <div className="flex gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-zinc-500 animate-bounce" style={{ animationDelay: "0ms" }} />
-            <span className="h-1.5 w-1.5 rounded-full bg-zinc-500 animate-bounce" style={{ animationDelay: "150ms" }} />
-            <span className="h-1.5 w-1.5 rounded-full bg-zinc-500 animate-bounce" style={{ animationDelay: "300ms" }} />
+            <span
+              className="h-1.5 w-1.5 rounded-full bg-zinc-500 animate-bounce"
+              style={{ animationDelay: "0ms" }}
+            />
+            <span
+              className="h-1.5 w-1.5 rounded-full bg-zinc-500 animate-bounce"
+              style={{ animationDelay: "150ms" }}
+            />
+            <span
+              className="h-1.5 w-1.5 rounded-full bg-zinc-500 animate-bounce"
+              style={{ animationDelay: "300ms" }}
+            />
           </div>
-          <span className="text-xs text-zinc-500">{is_fix_mode() ? "Fixing scene..." : "Thinking..."}</span>
+          <span className="text-xs text-zinc-500">{"Cooking..."}</span>
         </div>
       ) : (
         <div className="px-2">
           <div className="group">
-            <div className="w-full px-4 pt-2 pb-0 text-sm text-primary">
-              {is_build_json ? (
-                <AssistantText />
-              ) : (
-                <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
-              )}
+            <div className="w-full px-4 pb-0 text-sm text-primary break-words">
+              <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
             </div>
 
             {show_meta && (
               <div className="mt-0.5 flex px-4 opacity-0 group-hover:opacity-100">
                 <span className="text-[10px] font-medium tracking-wide text-muted">
-                  {mode === "ask" ? "ASK" : "BUILD"}
+                  {mode === "ask" ? "ASK" : mode === "build" ? "BUILD" : "FIX"}
                   {model_name && ` • ${model_name}`}
                   {time_str && ` • ${time_str}`}
                 </span>

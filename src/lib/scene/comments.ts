@@ -137,14 +137,12 @@ export function remove_comments(code: string): string {
   for (const line of lines) {
     const trimmed = line.trim();
 
-    if (trimmed.startsWith("//")) {
+    // Skip lines that are comments (start with // or /* or are just * for block comments)
+    if (trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*") || trimmed === "*/") {
       continue;
     }
 
-    if (trimmed.startsWith("/*") || trimmed.startsWith("*")) {
-      continue;
-    }
-
+    // Skip empty lines
     if (trimmed === "") {
       continue;
     }
@@ -296,4 +294,14 @@ export function pretty_print_scene_code(code: string, method?: string): string {
 
   // Then inject comments
   return inject_comments(formattedCode, method);
+}
+
+/**
+ * Formats scene code (multi-line formatting only, no comments)
+ * Used after successful validation to keep code readable
+ */
+export function format_scene_code(code: string): string {
+  const lines = code.split("\n");
+  const formattedLines = lines.map((line) => format_single_line_object(line));
+  return formattedLines.join("\n");
 }

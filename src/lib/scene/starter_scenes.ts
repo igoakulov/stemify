@@ -20,7 +20,7 @@ scene.addAxes({
   z: { start: -7, end: 7 }
 });
 
-scene.addPoly2({
+scene.addPoly2D({
   id: "house_body",
   points: [
     { x: -4, y: 0, z: 3 },

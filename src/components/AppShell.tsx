@@ -16,6 +16,7 @@ import {
   clear_active_scene_id,
   type SavedScene,
   update_scene_grid,
+  upsert_scene,
 } from "@/lib/scene/store";
 import { get_current_abort_controller, set_current_abort_controller } from "@/lib/chat/store";
 import { useSceneSelection } from "@/lib/scene/use_scene_selection";
@@ -204,7 +205,11 @@ export function AppShell() {
   const handleSceneCodeChange = useCallback((code: string) => {
     setSceneCode(code);
     if (active_scene) {
-      update_scene_grid(active_scene.id, {});
+      upsert_scene({
+        ...active_scene,
+        sceneCode: code,
+        updatedAt: Date.now(),
+      });
     }
   }, [active_scene]);
 
@@ -272,8 +277,9 @@ export function AppShell() {
             </div>
             
             {/* Editor - slides down from under header when open, slides up when closed */}
-            <div className={`overflow-hidden mb-2 transition-all duration-300 ease-out ${showSceneEditor ? "h-[40%] min-h-[150px] shrink-0" : "h-0 min-h-0 shrink-0"}`}>
+            <div className={`overflow-hidden mb-2 transition-all duration-100 ease-out ${showSceneEditor ? "h-[40%] min-h-[150px] shrink-0" : "h-0 min-h-0 shrink-0"}`}>
               <SceneEditorPanel
+                key={selectedObjectId ?? "scene-view"}
                 fullSceneCode={sceneCode}
                 selectedObjectId={selectedObjectId}
                 breadcrumbs={breadcrumbs}
@@ -286,7 +292,7 @@ export function AppShell() {
             </div>
             
             {/* Chat content - fills remaining space, pushed down by editor */}
-            <div className={`overflow-hidden transition-all duration-300 ease-out flex-1 min-h-0`}>
+            <div className={`overflow-hidden transition-all duration-100 ease-out flex-1 min-h-0`}>
               <ChatPanel 
                 active_scene={active_scene}
                 showSceneEditorButton={false}

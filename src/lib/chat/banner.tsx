@@ -29,10 +29,8 @@ export function set_banner(banner: BannerState): void {
 }
 
 export function clear_banner(): void {
-  if (!current_banner || current_banner.dismissable) {
-    current_banner = null;
-    listeners.forEach((listener) => listener());
-  }
+  current_banner = null;
+  listeners.forEach((listener) => listener());
 }
 
 export function subscribe_banner(listener: () => void): () => void {
@@ -147,7 +145,6 @@ export type BannerConfig = {
 export const BANNERS: {
   API_KEY_NEEDED: BannerConfig;
   OPENROUTER_ERROR: (errorMessage: string) => BannerConfig;
-  NOTHING_TO_BUILD: BannerConfig;
   INVALID_SCENE_CODE: BannerConfig;
   PERFORMANCE_WARNING: (details: string) => BannerConfig;
   WELCOME_SETUP: BannerConfig;
@@ -183,13 +180,6 @@ export const BANNERS: {
     message: `Failed to get response from OpenRouter: ${errorMessage}`,
     title: "OpenRouter Error",
   }),
-
-  NOTHING_TO_BUILD: {
-    message:
-      "Assistant's response has no scene code. Click redo or try a new prompt.",
-    title: "Nothing to BUILD",
-    actions: [create_retry_action()],
-  },
 
   INVALID_SCENE_CODE: {
     message:

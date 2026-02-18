@@ -82,6 +82,7 @@
   --muted-foreground: oklch(0.552 0.016 285.938);
   --accent: oklch(0.967 0.001 286.375);
   --accent-foreground: oklch(0.21 0.006 285.885);
+  --accent-primary: oklch(0.66 0.18 37.38);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.92 0.004 286.32);
   --input: oklch(0.92 0.004 286.32);
@@ -118,6 +119,7 @@
   --muted-foreground: oklch(0.705 0.015 286.067);
   --accent: oklch(0.274 0.006 286.033);
   --accent-foreground: oklch(0.985 0 0);
+  --accent-primary: oklch(0.66 0.18 37.38);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
@@ -182,3 +184,36 @@
 .text-tertiary { @apply text-white/40; }
 .text-muted { @apply text-white/50; }
 .text-placeholder { @apply text-white/40; }
+
+@keyframes streaming-glow {
+  0%, 100% {
+    border-color: oklch(0.66 0.18 37.38 / 70%);
+    box-shadow: 0 0 10px oklch(0.66 0.18 37.38 / 50%);
+  }
+  50% {
+    border-color: oklch(0.66 0.18 37.38 / 100%);
+    box-shadow: 0 0 20px oklch(0.66 0.18 37.38 / 70%);
+  }
+}
+
+.streaming-code-block {
+  border-radius: 1rem;
+  animation: streaming-glow 1.5s ease-in-out infinite;
+}
+
+/* Hide assistant-ui streaming caret - all possible selectors */
+.aui-md[data-status="running"]::after,
+:where(.aui-md[data-status="running"])::after,
+:where(.aui-md[data-status="running"]) > :last-child::after,
+:where(.aui-md[data-status="running"]) > pre:last-child code::after {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  content: none !important;
+}
+
+/* Also override the animation */
+@keyframes aui-pulse {
+  from, to { opacity: 0; }
+  50% { opacity: 0; }
+}

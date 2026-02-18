@@ -6,15 +6,16 @@ import {
   MarkdownTextPrimitive,
   unstable_memoizeMarkdownComponents as memoizeMarkdownComponents,
   useIsMarkdownCodeBlock,
-  type CodeHeaderProps,
 } from "@assistant-ui/react-markdown";
+import { useMessage } from "@assistant-ui/react";
 import { CheckIcon, CopyIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import { memo, useState, useCallback, useEffect, type FC, type ReactNode } from "react";
+import { memo, useState, useEffect, useRef, type FC, type ReactNode, createContext, useContext } from "react";
 
 import { cn } from "@/lib/utils";
+import { get_error_context, subscribe_banner, get_banner } from "@/lib/chat/banner";
 
 const KATEX_SELECT_STYLE = (
   <style>{`
@@ -24,6 +25,24 @@ const KATEX_SELECT_STYLE = (
     }
   `}</style>
 );
+
+interface StreamingContextValue {
+  isStreamingThisMessage: boolean;
+  codeBlockIndex: number;
+  isFirstCodeBlock: boolean;
+  mode: "ask" | "build" | "fix" | undefined;
+}
+
+const StreamingContext = createContext<StreamingContextValue>({
+  isStreamingThisMessage: false,
+  codeBlockIndex: 0,
+  isFirstCodeBlock: true,
+  mode: undefined,
+});
+
+export function useStreamingContext() {
+  return useContext(StreamingContext);
+}
 
 function useCopyToClipboard({ copiedDuration = 2500 }: { copiedDuration?: number } = {}) {
   const [isCopied, setIsCopied] = useState(false);
@@ -37,45 +56,6 @@ function useCopyToClipboard({ copiedDuration = 2500 }: { copiedDuration?: number
   };
 
   return { isCopied, copyToClipboard };
-}
-
-// Global registry for collapse states
-const collapseRegistry = new Map<string, boolean>();
-const listeners = new Set<() => void>();
-
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => { listeners.delete(listener); };
-}
-
-function notify() {
-  listeners.forEach(listener => listener());
-}
-
-function getCollapseState(key: string): boolean {
-  return collapseRegistry.get(key) ?? true;
-}
-
-function setCollapseState(key: string, value: boolean) {
-  collapseRegistry.set(key, value);
-  notify();
-}
-
-function useCollapseState(key: string): [boolean, (value: boolean) => void] {
-  const [state, setState] = useState(() => getCollapseState(key));
-  
-  useEffect(() => {
-    const unsubscribe = subscribe(() => {
-      setState(getCollapseState(key));
-    });
-    return unsubscribe;
-  }, [key]);
-
-  const setCollapsed = useCallback((value: boolean) => {
-    setCollapseState(key, value);
-  }, [key]);
-
-  return [state, setCollapsed];
 }
 
 // Helper to extract code text from children
@@ -102,47 +82,154 @@ function extractCodeText(children: ReactNode): string {
   return '';
 }
 
-// Generate a stable key from code content
-function getCodeKey(code: string): string {
-  return code.slice(0, 100);
-}
+// Collapsible code block component
+const CollapsibleCodeBlock: FC<{ children: ReactNode; className?: string }> = ({ children, className }) => {
+  const { isStreamingThisMessage, mode } = useStreamingContext();
+  const codeText = extractCodeText(children);
 
-// Assistant-UI compatible CodeHeader component with expand/collapse
-export const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
+  // Try to extract scene field from JSON BEFORE transforming escapes
+  // This way we get the raw scene code which is valid JSON string
+  let extractedScene = null;
+  const looksLikeJsonScene = codeText.trim().startsWith('{') && codeText.includes('"scene":');
+  
+  if (looksLikeJsonScene) {
+    try {
+      const parsed = JSON.parse(codeText);
+      if (parsed.scene && typeof parsed.scene === 'string') {
+        extractedScene = parsed.scene;
+      }
+    } catch {
+      // Not valid JSON
+    }
+  }
+
+  // Transform escape sequences - work on either extracted scene or original code
+  const transformedCode = extractedScene || codeText;
+  const formattedCode = transformedCode
+    .replace(/\\n/g, "\n")
+    .replace(/\\"/g, '"')
+    .replace(/\n\n+/g, "\n");
+
+  // Each code block has its own independent collapse state, default collapsed
+  const [isCollapsed, setIsCollapsed] = useState(true);
+  const lineCount = formattedCode ? formattedCode.split('\n').length : 0;
+  // Always show toggle if there are enough lines OR during streaming to maintain collapse state
+  const shouldShowToggle = lineCount > 3 || isStreamingThisMessage;
+  const shouldCollapse = shouldShowToggle && isCollapsed;
+
   const { isCopied, copyToClipboard } = useCopyToClipboard();
-  const key = code ? getCodeKey(code) : '';
-  const [isCollapsed, setIsCollapsed] = useCollapseState(key);
-  const lineCount = code ? code.split('\n').length : 0;
-  const showCollapse = lineCount > 3;
+
+  // Determine label based on whether this is a scene code block
+  const isSceneCode = extractedScene !== null;
+  const label = isSceneCode ? "scene code" : "code";
+
+  // Helper to strip markdown fences for comparison
+  const stripFences = (text: string) => {
+    return text.replace(/^```(?:\w+)?\n?/, '').replace(/```$/, '').trim();
+  };
+
+  // Track error/warning state from banner
+  const [bannerState, setBannerState] = useState<{ type: string; message: string | null }>({ type: "", message: null });
+
+  useEffect(() => {
+    const unsubscribe = subscribe_banner(() => {
+      const ctx = get_error_context();
+      const banner = get_banner();
+      // Check if invalid_json contains this code block's content (full response includes code block)
+      const normalizedCode = stripFences(codeText);
+      if (ctx && ctx.invalid_json && normalizedCode && ctx.invalid_json.includes(normalizedCode) && banner) {
+        setBannerState({ type: banner.type, message: ctx.error_message || null });
+      } else {
+        setBannerState({ type: "", message: null });
+      }
+    });
+    return unsubscribe;
+  }, [codeText]);
+
+  const isError = bannerState.type === "error";
+
+  // Animation: only animate blocks in BUILD/FIX mode containing scene code
+  // Use formattedCode since after extraction it contains the pure scene JS
+  const isSceneBlock = formattedCode.includes('scene.');
+  const isBuildOrFix = mode === "build" || mode === "fix";
+  const shouldStream = isStreamingThisMessage && isSceneBlock && isBuildOrFix;
+
+  // Autoscroll during streaming - scroll ALL code blocks (not just scene)
+  const codeBlockRef = useRef<HTMLDivElement>(null);
+  const wasStreamingRef = useRef(false);
+  
+  useEffect(() => {
+    // Scroll to bottom during streaming
+    if (isStreamingThisMessage && codeBlockRef.current) {
+      requestAnimationFrame(() => {
+        if (codeBlockRef.current) {
+          codeBlockRef.current.scrollTop = codeBlockRef.current.scrollHeight;
+        }
+      });
+    }
+    
+    // Scroll to top when this block's streaming completes
+    if (wasStreamingRef.current && !isStreamingThisMessage && codeBlockRef.current) {
+      requestAnimationFrame(() => {
+        if (codeBlockRef.current) {
+          codeBlockRef.current.scrollTop = 0;
+        }
+      });
+    }
+    
+    wasStreamingRef.current = isStreamingThisMessage;
+  }, [codeText, isStreamingThisMessage]);
 
   return (
-    <div className="flex items-center justify-between rounded-t-2xl border border-white/5 border-b-0 bg-white/3 px-3 py-1.5 text-xs">
-      <span className="font-medium text-secondary lowercase">{language || "code"}</span>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          className="text-white/50 hover:text-white transition-colors"
-          aria-label="Copy code"
-          onClick={() => {
-            if (!code || isCopied) return;
-            copyToClipboard(code);
-          }}
-        >
-          {!isCopied ? <CopyIcon className="h-3.5 w-3.5" /> : <CheckIcon className="h-3.5 w-3.5" />}
-        </button>
-        {showCollapse && (
+    <div className={cn(
+      "relative pointer-events-none overflow-hidden",
+      shouldStream && "streaming-code-block",
+      isError && "border border-red-500/30 rounded-2xl shadow-[0_0_10px_rgba(239,68,68,0.5)]"
+    )}>
+      {/* Inline header - renders immediately with content */}
+      <div className="flex items-center justify-between rounded-t-2xl border border-white/5 border-b-0 bg-white/3 px-3 py-1.5 text-xs pointer-events-auto">
+        <span className="font-medium text-secondary lowercase">{label}</span>
+        <div className="flex items-center gap-2">
           <button
             type="button"
             className="text-white/50 hover:text-white transition-colors"
-            aria-label={isCollapsed ? "Expand code" : "Collapse code"}
-            onClick={() => setIsCollapsed(!isCollapsed)}
+            aria-label="Copy code"
+            onClick={() => {
+              if (!formattedCode || isCopied) return;
+              copyToClipboard(formattedCode);
+            }}
           >
-            {isCollapsed ? (
-              <ChevronDownIcon className="h-3.5 w-3.5" />
-            ) : (
-              <ChevronUpIcon className="h-3.5 w-3.5" />
-            )}
+            {!isCopied ? <CopyIcon className="h-3.5 w-3.5" /> : <CheckIcon className="h-3.5 w-3.5" />}
           </button>
+          {shouldShowToggle && (
+            <button
+              type="button"
+              className="text-white/50 hover:text-white transition-colors"
+              aria-label={isCollapsed ? "Expand code" : "Collapse code"}
+              onClick={() => setIsCollapsed(!isCollapsed)}
+            >
+              {isCollapsed ? (
+                <ChevronDownIcon className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronUpIcon className="h-3.5 w-3.5" />
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+      <div 
+        ref={codeBlockRef}
+        className={cn(
+          "relative overflow-auto rounded-t-none rounded-b-2xl border border-white/5 border-t-0 bg-white/3 pointer-events-auto",
+          shouldCollapse && "max-h-[5.5rem]",
+          className,
+        )}
+      >
+        <pre className="p-3 text-xs leading-relaxed select-text">
+          {formattedCode}
+        </pre>
+        {shouldCollapse && !isStreamingThisMessage && (
+          <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-zinc-900/50 to-transparent rounded-b-2xl pointer-events-none" />
         )}
       </div>
     </div>
@@ -159,38 +246,9 @@ function normalize_latex_delimiters(input: string): string {
   );
 }
 
-// Collapsible code block component
-const CollapsibleCodeBlock: FC<{ children: ReactNode; className?: string }> = ({ children, className }) => {
-  const codeText = extractCodeText(children);
-  const key = getCodeKey(codeText);
-  const [isCollapsed] = useCollapseState(key);
-  const lineCount = codeText.split('\n').length;
-  const shouldShowToggle = lineCount > 3;
-  const shouldCollapse = shouldShowToggle && isCollapsed;
-
-  return (
-    <div className="relative pointer-events-none">
-      <div 
-        className={cn(
-          "overflow-auto rounded-t-none rounded-b-2xl border border-white/5 border-t-0 bg-white/3 pointer-events-auto",
-          shouldCollapse && "max-h-[5.5rem]",
-          className,
-        )}
-      >
-        <pre className="p-3 text-xs leading-relaxed select-text">
-          {children}
-        </pre>
-      </div>
-      {shouldCollapse && (
-        <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-zinc-900/50 to-transparent rounded-b-2xl pointer-events-none" />
-      )}
-    </div>
-  );
-};
-
 const components = memoizeMarkdownComponents({
   p: ({ className, ...props }) => (
-    <p className={cn("my-2.5 leading-normal first:mt-0 last:mb-0 select-text", className)} {...props} />
+    <p className={cn("my-2 leading-normal first:mt-0 last:mb-0 select-text", className)} {...props} />
   ),
   ul: ({ className, ...props }) => (
     <ul className={cn("my-2 ml-4 list-disc marker:text-muted [&>li]:mt-1 select-text", className)} {...props} />
@@ -206,11 +264,6 @@ const components = memoizeMarkdownComponents({
   ),
   a: ({ className, ...props }) => (
     <a className={cn("text-white underline underline-offset-2 hover:text-white/80 select-text", className)} {...props} />
-  ),
-  pre: ({ className, children }) => (
-    <CollapsibleCodeBlock className={className}>
-      {children}
-    </CollapsibleCodeBlock>
   ),
   code: function Code({ className, ...props }) {
     const isCodeBlock = useIsMarkdownCodeBlock();
@@ -228,19 +281,41 @@ const components = memoizeMarkdownComponents({
 });
 
 export const MarkdownText = memo(function MarkdownText() {
+  // Message-specific status - only this message's streaming state
+  const status = useMessage((m) => m.status);
+  const isStreamingThisMessage = status?.type === "running";
+
+  // Get mode from message metadata
+  const mode = useMessage(
+    (m) => m.metadata?.custom?.stemify_mode as "ask" | "build" | "fix" | undefined,
+  );
+
+  const contextValue: StreamingContextValue = {
+    isStreamingThisMessage,
+    codeBlockIndex: 0,
+    isFirstCodeBlock: true,
+    mode,
+  };
+
   return (
-    <>
-      {KATEX_SELECT_STYLE}
-      <MarkdownTextPrimitive
-        remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeKatex]}
-        preprocess={normalize_latex_delimiters}
-        className="aui-md select-text"
-        components={{
-          ...components,
-          CodeHeader,
-        }}
-      />
-    </>
+    <StreamingContext.Provider value={contextValue}>
+      <>
+        {KATEX_SELECT_STYLE}
+        <MarkdownTextPrimitive
+          remarkPlugins={[remarkGfm, remarkMath]}
+          rehypePlugins={[rehypeKatex]}
+          preprocess={normalize_latex_delimiters}
+          className="aui-md select-text flex flex-col gap-3"
+          components={{
+            ...components,
+            pre: ({ className, children }) => (
+              <CollapsibleCodeBlock className={className}>
+                {children}
+              </CollapsibleCodeBlock>
+            ),
+          }}
+        />
+      </>
+    </StreamingContext.Provider>
   );
 });

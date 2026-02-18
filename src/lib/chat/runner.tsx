@@ -118,17 +118,17 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
   }
 
   if (parsed.kind === "text") {
-    console.log("[Runner] NOTHING_TO_BUILD - setting last error");
+    console.log("[Runner] INVALID_SCENE_CODE - setting last error");
     prepare_error_context({
       thread_id: options.thread_id,
       user_message: options.user_text,
-      error_message: "No scene code in response",
+      error_message: "Response must be JSON format. Include scene code as a JSON string field 'scene'. Camera is optional.",
       invalid_json: raw,
       scene: options.scene,
       mode: options.mode,
     });
-    const config = BANNERS.NOTHING_TO_BUILD;
-    show_warning(config.message, {
+    const config = BANNERS.INVALID_SCENE_CODE;
+    show_error(config.message, {
       title: config.title,
       actions: config.actions,
     });
@@ -137,7 +137,7 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
 
   const scene_code = get_scene_code(parsed.payload);
   if (!scene_code) {
-    const error_msg = "Model returned JSON but no valid scene";
+    const error_msg = "JSON missing required 'scene' field. Include 'scene' as a string containing scene.add*() method calls.";
     prepare_error_context({
       thread_id: options.thread_id,
       user_message: options.user_text,

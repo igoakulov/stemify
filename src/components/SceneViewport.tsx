@@ -39,6 +39,8 @@ export function SceneViewport(props: SceneViewportProps) {
   const selected_mesh_ref = useRef<THREE.Object3D | null>(null);
   const selected_id_ref = useRef<string | null>(null);
   const tooltip_object_id_ref = useRef<string | null>(null);
+  const saved_camera_position_ref = useRef<THREE.Vector3 | null>(null);
+  const saved_camera_target_ref = useRef<THREE.Vector3 | null>(null);
   const raycaster_ref = useRef<THREE.Raycaster>(new THREE.Raycaster());
   const mouse_ref = useRef<THREE.Vector2>(new THREE.Vector2());
   const mouse_down_pos_ref = useRef<{ x: number; y: number } | null>(null);
@@ -455,6 +457,13 @@ export function SceneViewport(props: SceneViewportProps) {
 
     window.addEventListener("stemify:camera-reset", on_reset);
 
+    // Save camera position before re-creating scene (preserve user's view)
+    const existingRuntime = runtime_ref.current;
+    if (existingRuntime) {
+      saved_camera_position_ref.current = existingRuntime.camera.position.clone();
+      saved_camera_target_ref.current = existingRuntime.controls.target.clone();
+    }
+
     // Large ground grid: 20x20 units with 0.5 unit spacing
     const grid = new THREE.GridHelper(20, 40);
     grid.material = runtime.materials.grid_line;
@@ -586,10 +595,10 @@ export function SceneViewport(props: SceneViewportProps) {
           });
         }
 
-        // Show warning if no JSON-like content found
+        // Show error if no JSON-like content found
         if (!json_found) {
-          const config = BANNERS.NOTHING_TO_BUILD;
-          show_warning(config.message, {
+          const config = BANNERS.INVALID_SCENE_CODE;
+          show_error(config.message, {
             title: config.title,
             actions: config.actions,
           });

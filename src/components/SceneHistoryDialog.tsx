@@ -153,7 +153,7 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
   return (
     <>
       <Dialog open={open} onOpenChange={set_open}>
-        <DialogContent className="max-w-xl bg-white text-zinc-950 overflow-hidden max-h-[80vh] flex flex-col">
+        <DialogContent className="max-w-xl bg-white text-[var(--main-black)] overflow-hidden max-h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription>

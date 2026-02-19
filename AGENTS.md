@@ -89,7 +89,7 @@ npm run lint
 
 - Use Tailwind CSS utility classes
 - Use `cn()` utility from `@/lib/utils` for conditional classes
-- Dark theme: use `white/10`, `white/50`, `zinc-900`, `zinc-950`
+- Dark theme: use `white/10`, `white/50`, `zinc-900`, `var(--main-black)`
 - shadcn/ui components: use `!` prefix to override default styles
 - Compact components: minimal padding, no borders
 

@@ -61,7 +61,6 @@ export function is_fix_mode(): boolean {
 }
 
 export function prepare_error_context(context: RetryContext): void {
-  console.log("[Banner] prepare_error_context called:", context);
   last_error = context;
 }
 
@@ -74,11 +73,9 @@ export function clear_error_context(): void {
 }
 
 export function create_retry_action(): BannerAction {
-  console.log("[Banner] create_retry_action called");
   return {
     label: "Redo",
     onClick: () => {
-      console.log("[Banner] Redo clicked!");
       window.dispatchEvent(new CustomEvent("stemify:retry-failed"));
     },
   };
@@ -109,7 +106,6 @@ export function show_warning(
     dismissable?: boolean;
   },
 ): void {
-  console.log("[Banner] show_warning called, actions:", options?.actions);
   set_banner({
     type: "warning",
     message,

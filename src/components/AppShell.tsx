@@ -11,6 +11,7 @@ import { SceneEditorPanel } from "@/components/SceneEditorPanel";
 import { clear_banner } from "@/lib/chat/banner";
 import {
   load_saved_scenes,
+  save_saved_scenes,
   get_active_scene_id,
   set_active_scene_id,
   clear_active_scene_id,
@@ -21,6 +22,7 @@ import {
 import { get_current_abort_controller, set_current_abort_controller } from "@/lib/chat/store";
 import { useSceneSelection } from "@/lib/scene/use_scene_selection";
 import { useSceneEditorStore } from "@/lib/scene/editor_store";
+import { SCENE_ROOT_ID } from "@/lib/scene/constants";
 
 export function AppShell() {
   const [active_scene, set_active_scene] = useState<SavedScene | null>(null);
@@ -29,10 +31,11 @@ export function AppShell() {
   const [sceneCode, setSceneCode] = useState("");
   const active_scene_id_ref = useRef<string | null>(null);
   const manualToggleRef = useRef(false);
+  const prevSceneRef = useRef<SavedScene | null>(null);
   
   const selectedObjectId = useSceneEditorStore((s) => s.selectedObjectId);
   const breadcrumbs = useSceneEditorStore((s) => s.breadcrumbs);
-  const originalSelectedId = useSceneEditorStore((s) => s.originalSelectedId);
+  const startObjectId = useSceneEditorStore((s) => s.startObjectId);
   const validationError = useSceneEditorStore((s) => s.validationError);
 
   useSceneSelection();
@@ -87,19 +90,6 @@ export function AppShell() {
     window.addEventListener("stemify:open-editor", handleOpenEditor);
     return () => window.removeEventListener("stemify:open-editor", handleOpenEditor);
   }, [showSceneEditor]);
-
-  // Auto-open/close editor based on selection (respects manual toggle)
-  useEffect(() => {
-    if (manualToggleRef.current) {
-      manualToggleRef.current = false;
-      return;
-    }
-    if (selectedObjectId && !showSceneEditor) {
-      window.requestAnimationFrame(() => setShowSceneEditor(true))
-    } else if (!selectedObjectId && showSceneEditor) {
-      window.requestAnimationFrame(() => setShowSceneEditor(false))
-    }
-  }, [selectedObjectId, showSceneEditor])
 
   const handleDrillUp = useCallback(() => {
     if (!selectedObjectId) return;
@@ -165,7 +155,6 @@ export function AppShell() {
     const on_scenes_changed = (event: Event) => {
       const custom = event as CustomEvent<{ activeId?: string }>;
       refresh_from_storage(custom.detail?.activeId);
-      setShowSceneEditor(false);
     };
 
     const on_load_scene = (event: Event) => {
@@ -178,7 +167,6 @@ export function AppShell() {
         setSceneCode("");
         clear_active_scene_id();
         clear_banner();
-        setShowSceneEditor(false);
       } else {
         active_scene_id_ref.current = scene.id;
         set_active_scene(scene);
@@ -186,7 +174,6 @@ export function AppShell() {
         setSceneCode(scene.sceneCode ?? "");
         set_active_scene_id(scene.id);
         clear_banner();
-        setShowSceneEditor(false);
       }
     };
 
@@ -202,26 +189,62 @@ export function AppShell() {
     };
   }, [refresh_from_storage]);
 
-  const handleSceneCodeChange = useCallback((code: string) => {
+  const update_scene_code_editor = useCallback((code: string) => {
     setSceneCode(code);
+  }, []);
+
+  const update_scene_code_storage = useCallback((code: string) => {
     if (active_scene) {
       upsert_scene({
         ...active_scene,
         sceneCode: code,
         updatedAt: Date.now(),
       });
+      window.dispatchEvent(
+        new CustomEvent("stemify:scenes-changed", {
+          detail: { activeId: active_scene.id },
+        }),
+      );
+    } else if (code.trim()) {
+      // Create new scene in null state when user types valid code
+      const now = Date.now();
+      const new_scene: SavedScene = {
+        id: `scene_${now}`,
+        title: "Untitled",
+        createdAt: now,
+        updatedAt: now,
+        sceneCode: code,
+      };
+      const scenes = load_saved_scenes();
+      save_saved_scenes([new_scene, ...scenes]);
+      set_active_scene_id(new_scene.id);
+      window.dispatchEvent(
+        new CustomEvent("stemify:scenes-changed", {
+          detail: { activeId: new_scene.id },
+        }),
+      );
     }
   }, [active_scene]);
 
-  // Clear selection when scene changes or becomes null
+  // Clear selection when scene changes (including initial load and zero state)
   useEffect(() => {
-    if (!active_scene) {
-      window.dispatchEvent(new CustomEvent("stemify:select-object", { detail: { objectId: null } }));
+    const prevId = prevSceneRef.current?.id;
+    const currId = active_scene?.id;
+    const isInitialLoad = prevSceneRef.current === null;
+    if (isInitialLoad) {
+      prevSceneRef.current = active_scene;
+      return; // Let SceneViewport handle initialization
     }
+    if (prevId !== currId) {
+      window.dispatchEvent(new CustomEvent("stemify:select-object", { 
+        detail: { objectId: null, startObjectId: null, breadcrumbs: [] } 
+      }));
+    }
+    prevSceneRef.current = active_scene;
   }, [active_scene]);
 
   return (
-    <div className="h-dvh w-full overflow-hidden bg-zinc-950 text-zinc-50">
+    <div className="h-dvh w-full overflow-hidden bg-[var(--main-black)] text-zinc-50">
       <div className="grid h-full grid-cols-[minmax(0,7fr)_minmax(310px,3fr)] overflow-hidden">
           <section className="relative h-full overflow-hidden">
             <div className="h-full flex flex-col">
@@ -244,11 +267,8 @@ export function AppShell() {
                         update_scene_grid(active_scene.id, { enabled });
                       }
                     }}
-                    selectedObjectId={selectedObjectId}
                     onDrillUp={handleDrillUp}
                     onDrillDown={handleDrillDown}
-                    canDrillUp={!!selectedObjectId}
-                    canDrillDown={!!selectedObjectId}
                   />
                 </div>
             </div>
@@ -265,34 +285,40 @@ export function AppShell() {
             <div className="shrink-0">
               <ChatPanel 
                 active_scene={active_scene}
-                showSceneEditorButton={true}
-                onSceneEditorToggle={() => {
-                  manualToggleRef.current = true;
-                  setShowSceneEditor(!showSceneEditor);
-                }}
-                isSceneEditorOpen={showSceneEditor}
-                validationError={validationError}
+                showSceneEditorButton={false}
                 headerOnly={true}
               />
             </div>
             
-            {/* Editor - slides down from under header when open, slides up when closed */}
-            <div className={`overflow-hidden mb-2 transition-all duration-100 ease-out ${showSceneEditor ? "h-[40%] min-h-[150px] shrink-0" : "h-0 min-h-0 shrink-0"}`}>
+            {/* Editor - always visible, toolbar always shown, editor area collapses */}
+            <div className={`shrink-0 transition-all duration-100 ease-in-out ${showSceneEditor ? "h-[40%] min-h-[150px]" : "h-[34px]"}`}>
               <SceneEditorPanel
                 key={selectedObjectId ?? "scene-view"}
                 fullSceneCode={sceneCode}
                 selectedObjectId={selectedObjectId}
                 breadcrumbs={breadcrumbs}
-                onBreadcrumbClick={(id) => {
-                  // Click breadcrumb - navigate to that object, keep original chain
-                  window.dispatchEvent(new CustomEvent("stemify:select-object", { detail: { objectId: id, originalSelectedId: originalSelectedId } }));
+                onBreadcrumbClick={(id, index) => {
+                  // index 0 = "scene" - dispatch SCENE_ROOT_ID to show full scene code
+                  const objectId = index === 0 ? SCENE_ROOT_ID : id;
+                  window.dispatchEvent(new CustomEvent("stemify:select-object", { detail: { objectId, startObjectId, breadcrumbs } }));
                 }}
-                onSceneCodeChange={handleSceneCodeChange}
+                update_scene_code_editor={update_scene_code_editor}
+                update_scene_code_storage={update_scene_code_storage}
+                isOpen={showSceneEditor}
+                onToggle={() => {
+                  manualToggleRef.current = true;
+                  setShowSceneEditor(!showSceneEditor);
+                }}
+                onOpen={() => {
+                  manualToggleRef.current = true;
+                  setShowSceneEditor(true);
+                }}
+                validationError={validationError}
               />
             </div>
             
-            {/* Chat content - fills remaining space, pushed down by editor */}
-            <div className={`overflow-hidden transition-all duration-100 ease-out flex-1 min-h-0`}>
+            {/* Chat content - fills remaining space */}
+            <div className="overflow-hidden flex-1 min-h-0">
               <ChatPanel 
                 active_scene={active_scene}
                 showSceneEditorButton={false}

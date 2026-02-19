@@ -14,7 +14,8 @@ import { show_error, show_warning, BANNERS, prepare_error_context } from "@/lib/
 import {
   resize_renderer_to_canvas,
 } from "@/lib/three/base_template";
-import { get_original_selected_id } from "@/lib/scene/editor_store";
+import { get_start_object_id, useSceneEditorStore } from "@/lib/scene/editor_store";
+import { SCENE_ROOT_ID } from "@/lib/scene/constants";
 
 export type SceneViewportProps = {
   sceneCode: string;
@@ -57,8 +58,9 @@ export function SceneViewport(props: SceneViewportProps) {
   // Also recalculates breadcrumbs if missing (e.g., when clicking breadcrumb in AppShell)
   useEffect(() => {
     const handleExternalSelect = (event: Event) => {
-      const custom = event as CustomEvent<{ objectId: string | null; breadcrumbs?: string[]; originalSelectedId?: string | null }>;
+      const custom = event as CustomEvent<{ objectId: string | null; breadcrumbs?: string[]; startObjectId?: string | null }>;
       const objectId = custom.detail.objectId;
+      const breadcrumbs = custom.detail.breadcrumbs;
       
       // Apply selection highlight
       if (objectId) {
@@ -70,19 +72,27 @@ export function SceneViewport(props: SceneViewportProps) {
       setSelectedId(objectId);
       selected_id_ref.current = objectId;
       
-      // If breadcrumbs are missing but we have an object and registry, recalculate them
-      if (objectId && registry_ref.current && !custom.detail.breadcrumbs) {
-        // Preserve originalSelectedId if explicitly provided, otherwise use objectId
-        const originalSelectedId = custom.detail.originalSelectedId !== undefined 
-          ? custom.detail.originalSelectedId 
-          : objectId;
-        const breadcrumbs = originalSelectedId ? registry_ref.current.find_path_to_root(originalSelectedId) : [];
-        // Re-dispatch with breadcrumbs included, preserving originalSelectedId
+      // Auto-open editor for object selection, but not for scene level
+      if (objectId !== null && objectId !== SCENE_ROOT_ID) {
+        window.dispatchEvent(new CustomEvent("stemify:open-editor"));
+      }
+      
+      // If breadcrumbs are missing but we have registry, recalculate them
+      if (registry_ref.current && (!breadcrumbs || breadcrumbs.length === 0)) {
+        const incomingStartObjectId = custom.detail.startObjectId;
+        const incomingObjectId = custom.detail.objectId;
+        
+        // Normalize null to SCENE_ROOT_ID
+        const effectiveObjectId = incomingObjectId === null ? SCENE_ROOT_ID : incomingObjectId;
+        const effectiveStartObjectId = incomingStartObjectId === null ? SCENE_ROOT_ID : incomingStartObjectId;
+        
+        const newBreadcrumbs = registry_ref.current.find_path_to_root(effectiveObjectId);
+        // Re-dispatch with breadcrumbs included, preserving startObjectId
         window.dispatchEvent(new CustomEvent("stemify:select-object", { 
           detail: { 
-            objectId, 
-            breadcrumbs, 
-            originalSelectedId: custom.detail.originalSelectedId
+            objectId: effectiveObjectId, 
+            breadcrumbs: newBreadcrumbs, 
+            startObjectId: effectiveStartObjectId
           } 
         }));
       }
@@ -315,17 +325,15 @@ export function SceneViewport(props: SceneViewportProps) {
     }
 
     const objectId = getPickedId(event);
-    setSelectedId(objectId);
-    selected_id_ref.current = objectId;
-    const breadcrumbs = objectId && registry_ref.current
-      ? registry_ref.current.find_path_to_root(objectId)
+    // Clicking on empty space selects scene
+    const effectiveObjectId = objectId ?? SCENE_ROOT_ID;
+    setSelectedId(effectiveObjectId);
+    selected_id_ref.current = effectiveObjectId;
+    const breadcrumbs = registry_ref.current
+      ? registry_ref.current.find_path_to_root(effectiveObjectId)
       : [];
-    // Clicking sets both selected and original to the clicked object
-    window.dispatchEvent(new CustomEvent("stemify:select-object", { detail: { objectId, breadcrumbs, originalSelectedId: objectId } }));
-    // Also open editor when clicking an object (even if already selected)
-    if (objectId) {
-      window.dispatchEvent(new CustomEvent("stemify:open-editor"));
-    }
+    // Clicking sets both selected and start to the clicked object
+    window.dispatchEvent(new CustomEvent("stemify:select-object", { detail: { objectId: effectiveObjectId, breadcrumbs, startObjectId: effectiveObjectId } }));
   }, [getPickedId]);
 
   const handleLabelClick = useCallback((event: MouseEvent) => {
@@ -340,8 +348,8 @@ export function SceneViewport(props: SceneViewportProps) {
         const breadcrumbs = registry_ref.current
           ? registry_ref.current.find_path_to_root(objectId)
           : [];
-        // Clicking label sets both selected and original to the clicked object
-        window.dispatchEvent(new CustomEvent("stemify:select-object", { detail: { objectId, breadcrumbs, originalSelectedId: objectId } }));
+        // Clicking label sets both selected and start to the clicked object
+        window.dispatchEvent(new CustomEvent("stemify:select-object", { detail: { objectId, breadcrumbs, startObjectId: objectId } }));
         // Also open editor when clicking a label (even if already selected)
         window.dispatchEvent(new CustomEvent("stemify:open-editor"));
       }
@@ -412,31 +420,35 @@ export function SceneViewport(props: SceneViewportProps) {
 
   const handleDrillUp = useCallback((event: CustomEvent<{ objectId: string }>) => {
     const { objectId } = event.detail;
-    if (!registry_ref.current) return;
+    // Normalize SCENE_ROOT_ID to "scene" for breadcrumbs lookup
+    const effectiveObjectId = objectId === SCENE_ROOT_ID ? "scene" : objectId;
+    const breadcrumbs = useSceneEditorStore.getState().breadcrumbs;
+    const currentIndex = breadcrumbs.indexOf(effectiveObjectId);
     
-    const parentId = registry_ref.current.get_parent(objectId);
-    if (parentId) {
-      // Get the original selected leaf to show full path
-      const originalSelectedId = get_original_selected_id() || objectId;
-      const breadcrumbs = registry_ref.current.find_path_to_root(originalSelectedId);
-      // Don't reset originalSelectedId - keep the leaf we originally selected
-      window.dispatchEvent(new CustomEvent("stemify:select-object", { detail: { objectId: parentId, breadcrumbs, originalSelectedId } }));
+    // Only drill up if there's a parent (index > 0)
+    if (currentIndex > 0) {
+      const targetId = breadcrumbs[currentIndex - 1];
+      const effectiveTargetId = targetId === "scene" ? SCENE_ROOT_ID : targetId;
+      window.dispatchEvent(new CustomEvent("stemify:select-object", { 
+        detail: { objectId: effectiveTargetId, breadcrumbs, startObjectId: useSceneEditorStore.getState().startObjectId } 
+      }));
       window.dispatchEvent(new CustomEvent("stemify:open-editor"));
     }
   }, []);
 
   const handleDrillDown = useCallback((event: CustomEvent<{ objectId: string }>) => {
     const { objectId } = event.detail;
-    if (!registry_ref.current) return;
+    // Normalize SCENE_ROOT_ID to "scene" for breadcrumbs lookup
+    const effectiveObjectId = objectId === SCENE_ROOT_ID ? "scene" : objectId;
+    const breadcrumbs = useSceneEditorStore.getState().breadcrumbs;
+    const startObjectId = useSceneEditorStore.getState().startObjectId;
+    const currentIndex = breadcrumbs.indexOf(effectiveObjectId);
     
-    const children = registry_ref.current.get_children(objectId);
-    if (children.length > 0) {
-      // Try to restore to original selected child, otherwise pick first child
-      const originalSelectedId = get_original_selected_id();
-      const targetId = originalSelectedId && children.includes(originalSelectedId) ? originalSelectedId : children[0];
-      // Always use originalSelectedId for breadcrumbs to show full chain to original leaf
-      const breadcrumbs = originalSelectedId ? registry_ref.current.find_path_to_root(originalSelectedId) : [];
-      window.dispatchEvent(new CustomEvent("stemify:select-object", { detail: { objectId: targetId, breadcrumbs, originalSelectedId } }));
+    // Only drill down if there's a child (not at end of path)
+    if (currentIndex >= 0 && currentIndex < breadcrumbs.length - 1) {
+      const targetId = breadcrumbs[currentIndex + 1];
+      const effectiveTargetId = targetId === "scene" ? SCENE_ROOT_ID : targetId;
+      window.dispatchEvent(new CustomEvent("stemify:select-object", { detail: { objectId: effectiveTargetId, breadcrumbs, startObjectId } }));
       window.dispatchEvent(new CustomEvent("stemify:open-editor"));
     }
   }, []);
@@ -524,6 +536,24 @@ export function SceneViewport(props: SceneViewportProps) {
           show_warning(config.message, { title: config.title });
         }
         execute_scene_code(code, scene_api);
+
+        // After execution, recalculate breadcrumbs from startObjectId
+        const startId = get_start_object_id();
+        if (startId && registry_ref.current?.get_mesh(startId)) {
+          const newBreadcrumbs = registry_ref.current.find_path_to_root(startId);
+          window.dispatchEvent(new CustomEvent("stemify:select-object", { 
+            detail: { 
+              objectId: selected_id_ref.current,
+              startObjectId: startId,
+              breadcrumbs: newBreadcrumbs
+            } 
+          }));
+        } else if (startId && !registry_ref.current?.get_mesh(startId)) {
+          // startObjectId deleted - clear everything
+          window.dispatchEvent(new CustomEvent("stemify:select-object", { 
+            detail: { objectId: null, startObjectId: null, breadcrumbs: [] } 
+          }));
+        }
       }
     };
 
@@ -611,6 +641,18 @@ export function SceneViewport(props: SceneViewportProps) {
       execute_scene(code_to_execute);
     }
 
+    // Initialize breadcrumbs after scene setup (handles initial load)
+    const initBreadcrumbs = () => {
+      const store = useSceneEditorStore.getState();
+      if (!store.breadcrumbs || store.breadcrumbs.length === 0) {
+        // Calculate directly instead of dispatching empty and relying on recalc
+        const newBreadcrumbs = registry_ref.current?.find_path_to_root(SCENE_ROOT_ID) ?? ["scene"];
+        window.dispatchEvent(new CustomEvent("stemify:select-object", { 
+          detail: { objectId: SCENE_ROOT_ID, startObjectId: SCENE_ROOT_ID, breadcrumbs: newBreadcrumbs } 
+        }));
+      }
+    };
+
     // Add event listeners for selection and hover
     canvas.addEventListener("mousedown", handleMouseDown);
     canvas.addEventListener("click", handleClick);
@@ -622,7 +664,13 @@ export function SceneViewport(props: SceneViewportProps) {
     window.addEventListener("stemify:drill-up", handleDrillUp as EventListener);
     window.addEventListener("stemify:drill-down", handleDrillDown as EventListener);
 
+    // Use double raf to ensure this runs after all effects and scene is ready
+    const raf1 = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(initBreadcrumbs);
+    });
+
     return () => {
+      window.cancelAnimationFrame(raf1);
       window.removeEventListener("stemify:camera-reset", on_reset);
       canvas.removeEventListener("mousedown", handleMouseDown);
       canvas.removeEventListener("click", handleClick);
@@ -686,7 +734,7 @@ export function SceneViewport(props: SceneViewportProps) {
   return (
     <div
       ref={label_container_ref}
-      className="relative h-full w-full overflow-hidden rounded-r-2xl bg-gradient-to-b from-zinc-900 to-zinc-950"
+      className="relative h-full w-full overflow-hidden rounded-r-2xl bg-gradient-to-b from-zinc-900 to-[var(--main-black)]"
     >
       <canvas ref={canvas_ref} className="h-full w-full" />
       {tooltip && (
@@ -696,7 +744,7 @@ export function SceneViewport(props: SceneViewportProps) {
             // Use tooltip: prefix to select the tooltip itself (not underlying object)
             // Avoid double prefix if already selected
             const tooltipId = selectedId?.startsWith('tooltip:') ? selectedId : `tooltip:${selectedId}`;
-            window.dispatchEvent(new CustomEvent("stemify:select-object", { detail: { objectId: tooltipId, originalSelectedId: tooltipId } }));
+            window.dispatchEvent(new CustomEvent("stemify:select-object", { detail: { objectId: tooltipId, startObjectId: tooltipId } }));
             window.dispatchEvent(new CustomEvent("stemify:open-editor"));
           }}
         >

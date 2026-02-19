@@ -10,15 +10,10 @@ export function useSceneSelection() {
 
   useEffect(() => {
     const onSelect = (event: Event) => {
-      const custom = event as CustomEvent<{ objectId: string | null; breadcrumbs?: string[]; originalSelectedId?: string | null }>;
+      const custom = event as CustomEvent<{ objectId: string | null; breadcrumbs?: string[]; startObjectId?: string | null }>;
       const breadcrumbs = custom.detail.breadcrumbs ?? [];
-      const originalSelectedId = custom.detail.originalSelectedId;
-      // Only pass originalSelectedId if explicitly provided; otherwise preserve existing
-      if (originalSelectedId !== undefined) {
-        select_object(custom.detail.objectId, breadcrumbs, originalSelectedId);
-      } else {
-        select_object(custom.detail.objectId, breadcrumbs);
-      }
+      const startObjectId = custom.detail.startObjectId;
+      select_object(custom.detail.objectId, breadcrumbs, startObjectId);
     };
 
     const onHighlight = (event: Event) => {

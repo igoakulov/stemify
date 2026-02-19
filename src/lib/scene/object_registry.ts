@@ -1,5 +1,6 @@
 import type * as THREE from "three";
 
+import { SCENE_ROOT_ID } from "@/lib/scene/constants";
 import type { ObjectMeta } from "@/lib/scene/types";
 
 export type HoverData = {
@@ -86,14 +87,17 @@ export class ObjectRegistry {
   }
 
   find_path_to_root(id: string): string[] {
+    if (id === SCENE_ROOT_ID) return ["scene"];
+    
     const path: string[] = [];
     let current: string | null = id;
-
+    
     while (current) {
       path.unshift(current);
       current = this._parent_by_id.get(current) ?? null;
     }
-
+    
+    path.unshift("scene");
     return path;
   }
 

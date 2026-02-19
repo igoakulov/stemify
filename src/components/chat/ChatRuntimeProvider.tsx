@@ -6,7 +6,13 @@ import {
   type ThreadMessageLike,
   useExternalStoreRuntime,
 } from "@assistant-ui/react";
-import { useCallback, useSyncExternalStore, useRef, useEffect, useReducer } from "react";
+import {
+  useCallback,
+  useSyncExternalStore,
+  useRef,
+  useEffect,
+  useReducer,
+} from "react";
 
 import type { SavedScene } from "@/lib/scene/store";
 import { upsert_scene } from "@/lib/scene/store";
@@ -20,8 +26,18 @@ import {
   update_message_content,
 } from "@/lib/chat/store";
 import { load_openrouter_model_id } from "@/lib/settings/storage";
-import { show_error, BANNERS, get_error_context, clear_error_context, clear_banner, set_fix_mode } from "@/lib/chat/banner";
-import { get_current_abort_controller, set_current_abort_controller } from "@/lib/chat/store";
+import {
+  show_error,
+  BANNERS,
+  get_error_context,
+  clear_error_context,
+  clear_banner,
+  set_fix_mode,
+} from "@/lib/chat/banner";
+import {
+  get_current_abort_controller,
+  set_current_abort_controller,
+} from "@/lib/chat/store";
 import { load_effective_prompt_md } from "@/lib/prompts/system_prompt";
 
 export type ResolvedThread = {
@@ -81,7 +97,13 @@ const EMPTY_THREAD_STATE = {
 };
 
 export function ChatRuntimeProvider(props: ChatRuntimeProviderProps) {
-  const { thread_id, on_resolve_thread, children, on_send_user_message, on_first_assistant_response } = props;
+  const {
+    thread_id,
+    on_resolve_thread,
+    children,
+    on_send_user_message,
+    on_first_assistant_response,
+  } = props;
 
   const thread_id_ref = useRef(thread_id);
   const [, forceUpdate] = useReducer((x) => x + 1, 0);
@@ -155,7 +177,11 @@ export function ChatRuntimeProvider(props: ChatRuntimeProviderProps) {
         ...resolved_scene,
         updatedAt: Date.now(),
       });
-      window.dispatchEvent(new CustomEvent("stemify:scenes-changed", { detail: { activeId: resolved_scene.id } }));
+      window.dispatchEvent(
+        new CustomEvent("stemify:scenes-changed", {
+          detail: { activeId: resolved_scene.id },
+        }),
+      );
 
       set_is_running(resolved_thread_id, true);
       window.dispatchEvent(new Event("stemify:chat-changed"));
@@ -196,7 +222,8 @@ export function ChatRuntimeProvider(props: ChatRuntimeProviderProps) {
           },
         });
       } catch (error) {
-        const message = error instanceof Error ? error.message : "An error occurred";
+        const message =
+          error instanceof Error ? error.message : "An error occurred";
         const config = BANNERS.GENERIC_ERROR(message);
         show_error(config.message, {
           title: config.title,
@@ -287,7 +314,8 @@ export function ChatRuntimeProvider(props: ChatRuntimeProviderProps) {
           },
         });
       } catch (error) {
-        const message = error instanceof Error ? error.message : "An error occurred";
+        const message =
+          error instanceof Error ? error.message : "An error occurred";
         const config = BANNERS.GENERIC_ERROR(message);
         show_error(config.message, {
           title: config.title,
@@ -303,11 +331,8 @@ export function ChatRuntimeProvider(props: ChatRuntimeProviderProps) {
   );
 
   useEffect(() => {
-    console.log("[ChatRuntimeProvider] Retry useEffect mounted");
     const handle_retry = async () => {
-      console.log("[ChatRuntimeProvider] Retry handler fired!");
       const error_ctx = get_error_context();
-      console.log("[ChatRuntimeProvider] error_ctx:", error_ctx);
       if (!error_ctx) return;
 
       const retry_prompt = await load_effective_prompt_md("fix");
@@ -317,15 +342,19 @@ export function ChatRuntimeProvider(props: ChatRuntimeProviderProps) {
 
       const snapshot = get_thread(error_ctx.thread_id);
 
-      const last_user_idx = snapshot.messages.findLastIndex((m) => m.role === "user");
+      const last_user_idx = snapshot.messages.findLastIndex(
+        (m) => m.role === "user",
+      );
       let truncated_messages = snapshot.messages;
       if (last_user_idx >= 0) {
         truncated_messages = snapshot.messages.slice(0, last_user_idx + 1);
       }
 
       if (truncated_messages.length !== snapshot.messages.length) {
-        console.log("[ChatRuntimeProvider] Truncating history from", snapshot.messages.length, "to", truncated_messages.length, "messages");
-        set_thread(error_ctx.thread_id, { ...snapshot, messages: truncated_messages });
+        set_thread(error_ctx.thread_id, {
+          ...snapshot,
+          messages: truncated_messages,
+        });
       }
 
       const history: ChatMessage[] = truncated_messages.map((m) => ({ ...m }));
@@ -372,7 +401,8 @@ export function ChatRuntimeProvider(props: ChatRuntimeProviderProps) {
           },
         });
       } catch (error) {
-        const message = error instanceof Error ? error.message : "An error occurred";
+        const message =
+          error instanceof Error ? error.message : "An error occurred";
         const config = BANNERS.GENERIC_ERROR(message);
         show_error(config.message, {
           title: config.title,
@@ -388,9 +418,7 @@ export function ChatRuntimeProvider(props: ChatRuntimeProviderProps) {
     };
 
     window.addEventListener("stemify:retry-failed", handle_retry);
-    console.log("[ChatRuntimeProvider] Retry listener registered");
     return () => {
-      console.log("[ChatRuntimeProvider] Retry listener removed");
       window.removeEventListener("stemify:retry-failed", handle_retry);
     };
   }, [on_send_user_message]);
@@ -405,7 +433,11 @@ export function ChatRuntimeProvider(props: ChatRuntimeProviderProps) {
     convertMessage: (m) => to_thread_message_like(m),
   });
 
-  return <AssistantRuntimeProvider runtime={runtime}>{children}</AssistantRuntimeProvider>;
+  return (
+    <AssistantRuntimeProvider runtime={runtime}>
+      {children}
+    </AssistantRuntimeProvider>
+  );
 }
 
 export function append_to_assistant_message(options: {
@@ -413,6 +445,10 @@ export function append_to_assistant_message(options: {
   assistant_message_id: string;
   delta: string;
 }) {
-  update_message_content(options.thread_id, options.assistant_message_id, options.delta);
+  update_message_content(
+    options.thread_id,
+    options.assistant_message_id,
+    options.delta,
+  );
   window.dispatchEvent(new Event("stemify:chat-changed"));
 }

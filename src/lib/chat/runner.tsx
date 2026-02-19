@@ -8,13 +8,15 @@ import {
 import { upsert_scene, type SavedScene } from "@/lib/scene/store";
 
 import type { ChatMessage, ChatThreadId } from "@/lib/chat/types";
-import {
-  get_scene_code,
-  parse_model_output,
-} from "@/lib/chat/parse";
+import { get_scene_code, parse_model_output } from "@/lib/chat/parse";
 import { validate_scene_code } from "@/lib/chat/scene_apply";
 import { validate_llm_response } from "@/lib/scene/validation";
-import { show_error, show_warning, BANNERS, prepare_error_context } from "@/lib/chat/banner";
+import {
+  show_error,
+  show_warning,
+  BANNERS,
+  prepare_error_context,
+} from "@/lib/chat/banner";
 
 export type RunOptions = {
   thread_id: ChatThreadId;
@@ -46,11 +48,15 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
   const core_prompts = `${system_prompt}\n\n---\n\n${api_prompt}`;
 
   // 2. System: scene.md (fresh, if scene exists)
-  const has_scene_code = options.scene.sceneCode && options.scene.sceneCode.trim().length > 0;
+  const has_scene_code =
+    options.scene.sceneCode && options.scene.sceneCode.trim().length > 0;
   let scene_context: string | null = null;
   if (has_scene_code) {
     const scene_prompt = await load_effective_prompt_md("scene");
-    scene_context = scene_prompt.replace("{{sceneCode}}", options.scene.sceneCode);
+    scene_context = scene_prompt.replace(
+      "{{sceneCode}}",
+      options.scene.sceneCode,
+    );
   }
 
   // 3. System: ask.md or build.md (fresh)
@@ -67,7 +73,7 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
     ...options.history.map((m) => ({
       role: m.role as "system" | "user" | "assistant",
       content: m.content,
-    }))
+    })),
   );
 
   // Message 3: Scene context (if exists)
@@ -100,7 +106,8 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
       }
     }
   } catch (error) {
-    const error_message = error instanceof Error ? error.message : "Unknown error";
+    const error_message =
+      error instanceof Error ? error.message : "Unknown error";
     if (error instanceof Error && error.name === "AbortError") {
       return;
     }
@@ -118,11 +125,11 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
   }
 
   if (parsed.kind === "text") {
-    console.log("[Runner] INVALID_SCENE_CODE - setting last error");
     prepare_error_context({
       thread_id: options.thread_id,
       user_message: options.user_text,
-      error_message: "Response must be JSON format. Include scene code as a JSON string field 'scene'. Camera is optional.",
+      error_message:
+        "Response must be JSON format. Include scene code as a JSON string field 'scene'. Camera is optional.",
       invalid_json: raw,
       scene: options.scene,
       mode: options.mode,
@@ -137,7 +144,8 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
 
   const scene_code = get_scene_code(parsed.payload);
   if (!scene_code) {
-    const error_msg = "JSON missing required 'scene' field. Include 'scene' as a string containing scene.add*() method calls.";
+    const error_msg =
+      "JSON missing required 'scene' field. Include 'scene' as a string containing scene.add*() method calls.";
     prepare_error_context({
       thread_id: options.thread_id,
       user_message: options.user_text,
@@ -196,7 +204,9 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
 
   // Show performance warnings if any
   if (llm_validation.warnings && llm_validation.warnings.length > 0) {
-    const config = BANNERS.PERFORMANCE_WARNING(llm_validation.warnings.join("; "));
+    const config = BANNERS.PERFORMANCE_WARNING(
+      llm_validation.warnings.join("; "),
+    );
     show_warning(config.message, {
       title: config.title,
       actions: config.actions,
@@ -209,5 +219,9 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
     updatedAt: Date.now(),
     sceneCode: scene_code,
   });
-  window.dispatchEvent(new CustomEvent("stemify:scenes-changed", { detail: { activeId: options.scene.id } }));
+  window.dispatchEvent(
+    new CustomEvent("stemify:scenes-changed", {
+      detail: { activeId: options.scene.id },
+    }),
+  );
 }

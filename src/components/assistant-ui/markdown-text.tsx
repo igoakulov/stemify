@@ -182,7 +182,7 @@ const CollapsibleCodeBlock: FC<{ children: ReactNode; className?: string }> = ({
 
   return (
     <div className={cn(
-      "relative pointer-events-none overflow-hidden",
+      "relative pointer-events-none overflow-hidden my-3",
       shouldStream && "streaming-code-block",
       isError && "border border-red-500/30 rounded-2xl shadow-[0_0_10px_rgba(239,68,68,0.5)]"
     )}>
@@ -248,14 +248,14 @@ function normalize_latex_delimiters(input: string): string {
 
 const components = memoizeMarkdownComponents({
   p: ({ className, ...props }) => (
-    <p className={cn("my-2 leading-normal first:mt-0 last:mb-0 select-text", className)} {...props} />
+    <p className={cn("my-3 leading-normal first:mt-0 last:mb-0 select-text", className)} {...props} />
   ),
   ul: ({ className, ...props }) => (
-    <ul className={cn("my-2 ml-4 list-disc marker:text-muted [&>li]:mt-1 select-text", className)} {...props} />
+    <ul className={cn("my-3 ml-4 list-disc marker:text-muted [&>li]:mt-1 select-text", className)} {...props} />
   ),
   ol: ({ className, ...props }) => (
     <ol
-      className={cn("my-2 ml-4 list-decimal marker:text-muted [&>li]:mt-1 select-text", className)}
+      className={cn("my-3 ml-4 list-decimal marker:text-muted [&>li]:mt-1 select-text", className)}
       {...props}
     />
   ),
@@ -305,7 +305,7 @@ export const MarkdownText = memo(function MarkdownText() {
           remarkPlugins={[remarkGfm, remarkMath]}
           rehypePlugins={[rehypeKatex]}
           preprocess={normalize_latex_delimiters}
-          className="aui-md select-text flex flex-col gap-3"
+          className="aui-md select-text"
           components={{
             ...components,
             pre: ({ className, children }) => (

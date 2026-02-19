@@ -82,7 +82,8 @@ const SCENE_INTRO = `// Welcome to your Stemify scene code
 // 2. Edit its size, shape, color...
 // 3. Scene will update on the fly!
 
-// Stay under 50 objects / 100k polygons`;
+// Stay under 50 objects / 100k polygons
+`;
 
 export function inject_comments(code: string, method?: string): string {
   // Prepend intro for full scene code (when method is not specified)
@@ -138,7 +139,12 @@ export function remove_comments(code: string): string {
     const trimmed = line.trim();
 
     // Skip lines that are comments (start with // or /* or are just * for block comments)
-    if (trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*") || trimmed === "*/") {
+    if (
+      trimmed.startsWith("//") ||
+      trimmed.startsWith("/*") ||
+      trimmed.startsWith("*") ||
+      trimmed === "*/"
+    ) {
       continue;
     }
 

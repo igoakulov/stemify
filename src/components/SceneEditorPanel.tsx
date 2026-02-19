@@ -12,6 +12,7 @@ import {
 } from "@/lib/scene/editor_store";
 import { pretty_print_scene_code, format_scene_code, remove_comments } from "@/lib/scene/comments";
 import { validate_scene_code } from "@/lib/chat/scene_apply";
+import { SCENE_ROOT_ID } from "@/lib/scene/constants";
 
 type SceneEditorPanelProps = {
   className?: string;
@@ -22,9 +23,14 @@ type SceneEditorPanelProps = {
   fullSceneCode: string;
   selectedObjectId: string | null;
   breadcrumbs: string[];
-  onBreadcrumbClick: (id: string) => void;
-  onSceneCodeChange: (code: string) => void;
+  onBreadcrumbClick: (id: string, index: number) => void;
+  update_scene_code_editor: (code: string) => void;
+  update_scene_code_storage?: (code: string) => void;
   onApplySceneCode?: (code: string) => void;
+  isOpen?: boolean;
+  onToggle?: () => void;
+  onOpen?: () => void;
+  validationError?: string | null;
 };
 
 const DEBOUNCE_MS = 500;
@@ -39,17 +45,84 @@ export function SceneEditorPanel({
   selectedObjectId,
   breadcrumbs,
   onBreadcrumbClick,
-  onSceneCodeChange,
+  update_scene_code_editor,
+  update_scene_code_storage,
   onApplySceneCode,
+  isOpen = true,
+  onToggle,
+  onOpen,
+  validationError: validationErrorProp,
 }: SceneEditorPanelProps) {
-  const validationError = useSceneEditorStore((s) => s.validationError);
+  const storeValidationError = useSceneEditorStore((s) => s.validationError);
+  const validationError = validationErrorProp ?? storeValidationError;
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const breadcrumbsRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
 
-  const isObjectMode = selectedObjectId !== null;
+  const isObjectMode = selectedObjectId !== null && selectedObjectId !== SCENE_ROOT_ID;
+
+  const selectedObjectIdRef = useRef(selectedObjectId);
+  
+  const scrollBreadcrumbsToView = useCallback((activeId: string | null, breadcrumbs: string[], prevId: string | null) => {
+    if (!breadcrumbsRef.current) return;
+    
+    const container = breadcrumbsRef.current;
+    
+    if (!activeId) {
+      container.scrollTo({ left: 0, behavior: 'smooth' });
+      return;
+    }
+    
+    const effectiveId = activeId === SCENE_ROOT_ID ? "scene" : activeId;
+    const activeButton = container.querySelector(`button[data-id="${effectiveId}"]`);
+    if (!activeButton) return;
+
+    const buttonRect = activeButton.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    
+    // Determine direction from previous selection
+    const currentIndex = breadcrumbs.indexOf(effectiveId);
+    const prevIndex = prevId ? breadcrumbs.indexOf(prevId === SCENE_ROOT_ID ? "scene" : prevId) : -1;
+    
+    // Going towards root: index decreases, prefer left edge (inline: 'start')
+    // Going towards leaf: index increases, prefer right edge (inline: 'end')
+    let shouldScroll = false;
+    let inlineAlign: 'start' | 'center' | 'end' | 'nearest' = 'nearest';
+    
+    if (prevIndex === -1 || currentIndex === -1) {
+      shouldScroll = buttonRect.left < containerRect.left || buttonRect.right > containerRect.right;
+    } else if (currentIndex < prevIndex) {
+      // Going towards root - prefer left edge
+      shouldScroll = buttonRect.left < containerRect.left;
+      inlineAlign = 'start';
+    } else if (currentIndex > prevIndex) {
+      // Going towards leaf - prefer right edge
+      shouldScroll = buttonRect.right > containerRect.right;
+      inlineAlign = 'end';
+    } else {
+      shouldScroll = buttonRect.left < containerRect.left || buttonRect.right > containerRect.right;
+    }
+    
+    if (shouldScroll) {
+      activeButton.scrollIntoView({ 
+        block: 'nearest', 
+        inline: inlineAlign,
+        behavior: 'smooth'
+      });
+    }
+  }, []);
+
+  // Scroll breadcrumbs into view when selection changes
+  useEffect(() => {
+    const raf = window.requestAnimationFrame(() => {
+      const prevId = selectedObjectIdRef.current;
+      selectedObjectIdRef.current = selectedObjectId;
+      scrollBreadcrumbsToView(selectedObjectId, breadcrumbs, prevId);
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, [selectedObjectId, breadcrumbs, scrollBreadcrumbsToView]);
 
   // Initialize localCode with pretty-printed code on mount
   const [localCode, setLocalCode] = useState(() => {
@@ -93,14 +166,14 @@ export function SceneEditorPanel({
     (code: string) => {
       if (!code.trim()) {
         set_validation_error(null);
-        onSceneCodeChange(code);
+        update_scene_code_editor(code);
         return;
       }
 
       const result = validate_scene_code(code);
       if (!result.ok) {
         set_validation_error(result.error ?? "Invalid scene code");
-        onSceneCodeChange(code);
+        update_scene_code_editor(code);
         return;
       }
 
@@ -111,10 +184,11 @@ export function SceneEditorPanel({
       
       // Strip comments before saving to prevent stacking
       const cleanCode = remove_comments(formattedCode);
-      onSceneCodeChange(cleanCode);
+      update_scene_code_editor(cleanCode);
+      update_scene_code_storage?.(cleanCode);
       onApplySceneCode?.(cleanCode);
     },
-    [onSceneCodeChange, onApplySceneCode]
+    [update_scene_code_editor, update_scene_code_storage, onApplySceneCode]
   );
 
   const handleCodeChange = useCallback(
@@ -155,41 +229,15 @@ export function SceneEditorPanel({
     setTimeout(() => setCopied(false), 1500);
   }, [isObjectMode, selectedObjectId, localCode]);
 
-  // Calculate line offset and filtered code for object view
-  // Note: localCode already has comments injected on initial load via useState initializer
-  // After that, it's raw code (user edits) or formatted code (after validation)
+  // Get code to display - object code or full scene code
   const displayCode = useMemo(() => {
     if (isObjectMode && selectedObjectId) {
       const objectCode = extractObjectCode(localCode, selectedObjectId);
       if (objectCode) {
-        // Find the starting line of the object in the full code
-        const fullLines = localCode.split("\n");
-        const objectCodeLines = objectCode.split("\n");
-        const firstLine = objectCodeLines[0];
-        const firstLineTrimmed = firstLine?.trim();
-        const methodPrefix = firstLineTrimmed?.split('(')[0];
-        
-        let startIdx = -1;
-        for (let i = 0; i < fullLines.length; i++) {
-          if (fullLines[i].trim() === firstLineTrimmed || 
-              (fullLines[i].includes(selectedObjectId) && methodPrefix && fullLines[i].includes(methodPrefix))) {
-            startIdx = i;
-            break;
-          }
-        }
-        
-        return {
-          displayCode: objectCode,
-          lineNumberOffset: startIdx >= 0 ? startIdx : 0,
-        };
+        return objectCode;
       }
     }
-    
-    // Scene view - show all code
-    return {
-      displayCode: localCode,
-      lineNumberOffset: 0,
-    };
+    return localCode;
   }, [isObjectMode, selectedObjectId, localCode]);
 
   const showCopyButton = isHovered || isFocused;
@@ -197,35 +245,36 @@ export function SceneEditorPanel({
   return (
     <div className={cn("flex h-full flex-col overflow-hidden", className)}>
       {/* Toolbar */}
-      <div className="flex items-center gap-2 px-2 py-1 border-b border-white/5 shrink-0">
-        <Button
-          variant="toolbar"
-          size="icon"
-          className="h-6 w-6"
-          onClick={onUndo}
-          disabled={!canUndo}
-          title="Undo"
-        >
-          <Undo2 className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          variant="toolbar"
-          size="icon"
-          className="h-6 w-6"
-          onClick={onRedo}
-          disabled={!canRedo}
-          title="Redo"
-        >
-          <Redo2 className="h-3.5 w-3.5" />
-        </Button>
-
-        {breadcrumbs.length > 0 && (
-          <div 
-            ref={breadcrumbsRef}
-            className="flex items-center gap-1 text-xs text-white/60 overflow-x-auto scrollbar-hide"
-            style={{ scrollSnapType: 'x mandatory' }}
+      <div className="flex items-center gap-4 px-4 py-1 border-t border-b border-white/5 shrink-0">
+        <div className="flex items-center -mx-1">
+          <Button
+            variant="toolbar"
+            size="icon"
+            className="h-7 w-7"
+            onClick={onUndo}
+            disabled={!canUndo}
+            title="Undo"
           >
-            {breadcrumbs.map((id, index) => (
+            <Undo2 className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="toolbar"
+            size="icon"
+            className="h-7 w-7"
+            onClick={onRedo}
+            disabled={!canRedo}
+            title="Redo"
+          >
+            <Redo2 className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div 
+          ref={breadcrumbsRef}
+          className="flex items-center gap-1 text-xs text-white/60 overflow-x-auto scrollbar-hide"
+          style={{ scrollSnapType: 'x mandatory' }}
+        >
+          {breadcrumbs.map((id, index) => (
               <span 
                 key={id} 
                 className="flex items-center gap-1 shrink-0"
@@ -236,16 +285,24 @@ export function SceneEditorPanel({
                   data-id={id}
                   className={cn(
                     "hover:text-white shrink-0 px-1",
-                    id === selectedObjectId && "text-amber-400"
+                    ((id === selectedObjectId) || (index === 0 && selectedObjectId === SCENE_ROOT_ID)) && "text-amber-400"
                   )}
-                  onClick={() => onBreadcrumbClick(id)}
+                  onClick={() => {
+                    // "scene" (index 0) - select scene to show full scene code
+                    if (index === 0) {
+                      onBreadcrumbClick(id, index);
+                    } else if (id === selectedObjectId) {
+                      onOpen?.();
+                    } else {
+                      onBreadcrumbClick(id, index);
+                    }
+                  }}
                 >
                   {id}
                 </button>
               </span>
             ))}
-          </div>
-        )}
+        </div>
 
         <div className="flex-1" />
 
@@ -254,30 +311,42 @@ export function SceneEditorPanel({
             <AlertCircle className="h-3 w-3" />
           </div>
         )}
+
+        {onToggle && (
+          <Button
+            type="button"
+            variant="toolbar"
+            size="icon"
+            className={`h-7 w-7 transition-all duration-200 relative ${
+              isOpen
+                ? "bg-white/10 text-amber-400 hover:bg-white/15"
+                : "hover:bg-white/5"
+            }`}
+            onClick={onToggle}
+            title="Scene Editor"
+          >
+            <Code2 className="h-4 w-4" />
+          </Button>
+        )}
       </div>
 
       {/* Editor area */}
       <div 
-        className="flex-1 overflow-hidden relative"
+        className={cn(
+          "flex-1 overflow-hidden relative",
+          isOpen ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"
+        )}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
+        tabIndex={-1}
       >
-        {isObjectMode && !selectedObjectId ? (
-          <div className="flex h-full flex-col items-center justify-center text-center text-sm text-white/50">
-            <Code2 className="mb-2 h-8 w-8 text-white/20" />
-            <p className="mb-1">Click an object in the scene</p>
-            <p className="text-xs">to inspect and edit it.</p>
-          </div>
-        ) : (
-          <SceneCodeEditor
-            value={displayCode.displayCode}
-            onChange={handleCodeChange}
-            error={validationError}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
-            lineNumberOffset={displayCode.lineNumberOffset}
-          />
-        )}
+        <SceneCodeEditor
+          value={displayCode}
+          onChange={handleCodeChange}
+          error={validationError}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+        />
         
         {/* Floating copy button - only visible when hovered or focused */}
         <Button

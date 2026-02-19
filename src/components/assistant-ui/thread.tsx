@@ -78,7 +78,7 @@ export const Thread: FC<ThreadProps> = ({ show_recent_scenes, thread_id }) => {
           </div>
         )}
 
-        <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto flex w-full max-w-2xl flex-col gap-4 overflow-visible rounded-t-3xl bg-zinc-950/90 px-4 pb-4 pt-2 backdrop-blur">
+        <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto flex w-full max-w-2xl flex-col gap-4 overflow-visible rounded-t-3xl bg-[var(--main-black)]/90 px-4 pb-4 pt-2 backdrop-blur">
           <ThreadScrollToBottom viewportRef={viewport_ref} thread_id={thread_id} />
           <ChatStatusBanner />
           <Composer />
@@ -298,6 +298,24 @@ const ModeToggle: FC<{
     inputRef.current?.focus();
   };
 
+  const getSubmitButtonStyles = () => {
+    const base = "h-8 min-w-8 gap-2 px-3 text-xs font-semibold uppercase tracking-wide border-0 shrink-0 justify-between cursor-pointer rounded-lg";
+
+    if (mode === "ask") {
+      return `${base} bg-transparent text-amber-400 border-2 border-amber-400`;
+    }
+    return `${base} bg-amber-400 text-black border-2 border-amber-400`;
+  };
+
+  const getCancelButtonStyles = () => {
+    const base = "h-8 min-w-8 gap-2 px-3 text-xs font-semibold uppercase tracking-wide border-0 shrink-0 justify-between cursor-pointer rounded-lg";
+
+    if (mode === "ask") {
+      return `${base} bg-transparent text-amber-400 border-2 border-amber-400`;
+    }
+    return `${base} bg-amber-400 text-black border-2 border-amber-400`;
+  };
+
   return (
     <div className="group flex items-center gap-1">
       <button
@@ -326,7 +344,7 @@ const ModeToggle: FC<{
             style={{
               backgroundColor:
                 mode === "ask"
-                  ? "var(--accent-primary)"
+                  ? "#fbbf24"
                   : "rgba(255,255,255,0.3)",
             }}
           />
@@ -335,7 +353,7 @@ const ModeToggle: FC<{
             style={{
               backgroundColor:
                 mode === "build"
-                  ? "var(--accent-primary)"
+                  ? "#fbbf24"
                   : "rgba(255,255,255,0.3)",
             }}
           />
@@ -347,8 +365,7 @@ const ModeToggle: FC<{
           <Button
             type="submit"
             size="sm"
-            className="h-8 min-w-8 gap-2 px-3 text-xs font-semibold uppercase tracking-wide border-0 shrink-0 justify-between cursor-pointer rounded-lg"
-            style={{ backgroundColor: "var(--accent-primary)", color: "white" }}
+            className={getSubmitButtonStyles()}
           >
             <span className="text-left">{active_label}</span>
             <ArrowUp className="h-3.5 w-3.5 shrink-0" />
@@ -361,8 +378,7 @@ const ModeToggle: FC<{
           <Button
             type="button"
             size="sm"
-            className="h-8 min-w-8 gap-2 px-3 text-xs font-semibold uppercase tracking-wide border-0 shrink-0 justify-between cursor-pointer rounded-lg"
-            style={{ backgroundColor: "var(--accent-primary)", color: "white" }}
+            className={getCancelButtonStyles()}
           >
             <span className="text-left">Stop</span>
             <Square className="h-3.5 w-3.5 shrink-0" />

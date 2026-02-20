@@ -244,7 +244,7 @@ export function AppShell() {
   }, [active_scene]);
 
   return (
-    <div className="h-dvh w-full overflow-hidden bg-[var(--main-black)] text-zinc-50">
+    <div className="h-dvh w-dvw overflow-hidden bg-(--main-black) text-zinc-50">
       <div className="grid h-full grid-cols-[minmax(0,7fr)_minmax(310px,3fr)] overflow-hidden">
           <section className="relative h-full overflow-hidden">
             <div className="h-full flex flex-col">
@@ -291,9 +291,8 @@ export function AppShell() {
             </div>
             
             {/* Editor - always visible, toolbar always shown, editor area collapses */}
-            <div className={`shrink-0 transition-all duration-100 ease-in-out ${showSceneEditor ? "h-[40%] min-h-[150px]" : "h-[34px]"}`}>
+            <div className={`shrink-0 transition-all duration-100 ease-in-out ${showSceneEditor ? "h-[40%] min-h-37.5" : "h-8.5"}`}>
               <SceneEditorPanel
-                key={selectedObjectId ?? "scene-view"}
                 fullSceneCode={sceneCode}
                 selectedObjectId={selectedObjectId}
                 breadcrumbs={breadcrumbs}

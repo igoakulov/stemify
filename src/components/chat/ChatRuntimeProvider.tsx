@@ -12,6 +12,8 @@ import {
   useRef,
   useEffect,
   useReducer,
+  createContext,
+  useContext,
 } from "react";
 
 import type { SavedScene } from "@/lib/scene/store";
@@ -23,7 +25,10 @@ import {
   get_thread,
   set_is_running,
   set_thread,
+  trim_messages,
   update_message_content,
+  get_current_abort_controller,
+  set_current_abort_controller,
 } from "@/lib/chat/store";
 import { load_openrouter_model_id } from "@/lib/settings/storage";
 import {
@@ -34,10 +39,6 @@ import {
   clear_banner,
   set_fix_mode,
 } from "@/lib/chat/banner";
-import {
-  get_current_abort_controller,
-  set_current_abort_controller,
-} from "@/lib/chat/store";
 import { load_effective_prompt_md } from "@/lib/prompts/system_prompt";
 
 export type ResolvedThread = {
@@ -249,6 +250,104 @@ export function ChatRuntimeProvider(props: ChatRuntimeProviderProps) {
     window.dispatchEvent(new Event("stemify:chat-changed"));
   }, [thread_id]);
 
+  const onEdit = useCallback(
+    async (editedMessage: AppendMessage) => {
+      if (!thread_id) return;
+
+      const part = editedMessage.content[0];
+      if (!part || part.type !== "text") {
+        throw new Error("Only text messages are supported");
+      }
+
+      const edited_text = part.text;
+
+      // Cancel any ongoing streaming
+      const controller = get_current_abort_controller();
+      controller?.abort();
+      set_current_abort_controller(null);
+      set_is_running(thread_id, false);
+
+      // Find the last user message in the thread (the one being edited)
+      const state = get_thread(thread_id);
+      
+      // Find the last user message - that's the one being edited
+      let idx = -1;
+      for (let i = state.messages.length - 1; i >= 0; i--) {
+        if (state.messages[i].role === "user") {
+          idx = i;
+          break;
+        }
+      }
+
+      if (idx < 0) return;
+
+      // Get mode from original message (not from runConfig)
+      const originalMessage = state.messages[idx];
+      const mode: "ask" | "build" =
+        originalMessage.meta?.mode === "build" ? "build" : "ask";
+
+      // Replace the message content and trim everything after
+      // Explicitly preserve all fields to avoid any issues
+      const updatedMessage: ChatMessage = {
+        id: originalMessage.id,
+        role: originalMessage.role,
+        content: edited_text,
+        created_at: originalMessage.created_at,
+        meta: originalMessage.meta,
+      };
+      const next_messages: ChatMessage[] = [
+        ...state.messages.slice(0, idx),
+        updatedMessage,
+      ];
+      set_thread(thread_id, { ...state, messages: next_messages });
+
+      // Resolve thread and start new response
+      const resolved = await on_resolve_thread();
+      const resolved_thread_id = resolved.threadId;
+      const resolved_scene = resolved.scene;
+
+      set_is_running(resolved_thread_id, true);
+      window.dispatchEvent(new Event("stemify:chat-changed"));
+
+      try {
+        await on_send_user_message({
+          thread_id: resolved_thread_id,
+          scene: resolved_scene,
+          user_text: edited_text,
+          mode,
+          model_id: load_openrouter_model_id(),
+          on_first_delta: (assistant_message_id) => {
+            const assistant_msg: ChatMessage = {
+              id: assistant_message_id,
+              role: "assistant",
+              content: "",
+              created_at: Date.now(),
+              meta: {
+                mode,
+                model_id: load_openrouter_model_id(),
+              },
+            };
+            append_message(resolved_thread_id, assistant_msg);
+            window.dispatchEvent(new Event("stemify:chat-changed"));
+          },
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "An error occurred";
+        const config = BANNERS.GENERIC_ERROR(message);
+        show_error(config.message, {
+          title: config.title,
+          actions: config.actions,
+        });
+        window.dispatchEvent(new Event("stemify:chat-changed"));
+      } finally {
+        set_is_running(resolved_thread_id, false);
+        window.dispatchEvent(new Event("stemify:chat-changed"));
+      }
+    },
+    [thread_id, on_send_user_message, on_resolve_thread],
+  );
+
   const onReload = useCallback(
     async (parent_id: string | null) => {
       if (!thread_id) return;
@@ -429,14 +528,17 @@ export function ChatRuntimeProvider(props: ChatRuntimeProviderProps) {
     onNew,
     onCancel,
     onReload,
+    onEdit,
     setMessages,
     convertMessage: (m) => to_thread_message_like(m),
   });
 
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
-      {children}
-    </AssistantRuntimeProvider>
+    <ChatThreadProvider threadId={thread_id}>
+      <AssistantRuntimeProvider runtime={runtime}>
+        {children}
+      </AssistantRuntimeProvider>
+    </ChatThreadProvider>
   );
 }
 
@@ -451,4 +553,49 @@ export function append_to_assistant_message(options: {
     options.delta,
   );
   window.dispatchEvent(new Event("stemify:chat-changed"));
+}
+
+type ChatThreadContextType = {
+  threadId: string | null;
+  trimToMessage: (messageId: string) => void;
+};
+
+const ChatThreadContext = createContext<ChatThreadContextType | null>(null);
+
+export function useChatThread() {
+  return useContext(ChatThreadContext);
+}
+
+function ChatThreadProvider({
+  threadId,
+  children,
+}: {
+  threadId: string | null;
+  children: React.ReactNode;
+}) {
+  const trimToMessage = useCallback(
+    (messageId: string) => {
+      if (!threadId) return;
+
+      const controller = get_current_abort_controller();
+      controller?.abort();
+      set_current_abort_controller(null);
+      set_is_running(threadId, false);
+
+      const state = get_thread(threadId);
+      const idx = state.messages.findIndex((m) => m.id === messageId);
+      if (idx >= 0) {
+        trim_messages(threadId, idx);
+      }
+
+      window.dispatchEvent(new Event("stemify:chat-changed"));
+    },
+    [threadId],
+  );
+
+  return (
+    <ChatThreadContext.Provider value={{ threadId, trimToMessage }}>
+      {children}
+    </ChatThreadContext.Provider>
+  );
 }

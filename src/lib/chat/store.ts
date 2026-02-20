@@ -52,6 +52,12 @@ export function set_thread(thread_id: ChatThreadId, next: ChatThreadState): void
   save_chat(thread_id, next);
 }
 
+export function trim_messages(thread_id: ChatThreadId, from_index: number): void {
+  const state = get_thread(thread_id);
+  const next_messages = state.messages.slice(0, from_index);
+  set_thread(thread_id, { ...state, messages: next_messages });
+}
+
 export function append_message(thread_id: ChatThreadId, message: ChatMessage): void {
   const state = get_thread(thread_id);
   const updated_messages = [...state.messages, message];

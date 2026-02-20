@@ -13,6 +13,7 @@ type SceneCodeEditorProps = {
   lineNumberOffset?: number;
   onFocus?: () => void;
   onBlur?: () => void;
+  onEditorMount?: (editor: Parameters<OnMount>[0], monaco: Monaco) => void;
 };
 
 export function SceneCodeEditor({
@@ -24,10 +25,10 @@ export function SceneCodeEditor({
   lineNumberOffset = 0,
   onFocus,
   onBlur,
+  onEditorMount,
 }: SceneCodeEditorProps) {
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
-  const overflowRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
   const prevValueRef = useRef(value);
   const isFocusedRef = useRef(false);
@@ -69,6 +70,10 @@ export function SceneCodeEditor({
           // Minimap
           "minimap.background": "#242429",
           "minimapSlider.background": "#3a3a4260",
+
+          // Error squiggles
+          "editorError.foreground": "#f8717199",
+          "editorWarning.foreground": "#facc1599",
         },
       });
       monaco.editor.setTheme("stemify-dark");
@@ -164,8 +169,10 @@ export function SceneCodeEditor({
         },
         provideDocumentColors: () => null,
       });
+
+      onEditorMount?.(editor, monaco);
     },
-    [lineNumberOffset, onFocus, onBlur, language],
+    [lineNumberOffset, onFocus, onBlur, language, onEditorMount],
   );
 
   const handle_change = useCallback(
@@ -201,14 +208,6 @@ export function SceneCodeEditor({
   }, [error, mounted]);
 
   useEffect(() => {
-    if (!mounted || !editorRef.current || !overflowRef.current) return;
-
-    editorRef.current.updateOptions({
-      overflowWidgetsDomNode: overflowRef.current,
-    } as Parameters<typeof editorRef.current.updateOptions>[0]);
-  }, [mounted]);
-
-  useEffect(() => {
     if (!mounted || !editorRef.current) return;
     if (value === prevValueRef.current) return;
 
@@ -236,7 +235,7 @@ export function SceneCodeEditor({
   }, [value, mounted]);
 
   return (
-    <div className="h-full w-full bg-[var(--main-black)]">
+    <div className="h-full w-full bg-(--main-black)">
       <Editor
         height="100%"
         defaultLanguage={language}
@@ -247,9 +246,12 @@ export function SceneCodeEditor({
         options={{
           readOnly,
           domReadOnly: readOnly,
+          fixedOverflowWidgets: true,
+          tabSize: 2,
+          insertSpaces: true,
         }}
         loading={
-          <div className="flex h-full w-full items-center justify-center text-zinc-500">
+          <div className="flex h-full w-full items-center justify-center bg-(--main-black) text-zinc-500">
             Loading editor...
           </div>
         }

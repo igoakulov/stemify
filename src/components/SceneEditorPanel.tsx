@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Undo2, Redo2, Copy, Check, Code2, AlertCircle, AlertTriangle, ChevronLeft, ChevronRight, Crosshair, X } from "lucide-react";
+import type { OnMount } from "@monaco-editor/react";
+import type { Monaco } from "@monaco-editor/react";
 
 import { SceneCodeEditor } from "@/components/SceneCodeEditor";
 import { Button } from "@/components/ui/button";
@@ -15,9 +17,15 @@ import {
   next_error,
   prev_error,
 } from "@/lib/scene/editor_store";
-import { pretty_print_scene_code, format_scene_code, remove_comments } from "@/lib/scene/comments";
+import { append_docs, strip_docs, get_docs_marker, format_scene_code } from "@/lib/scene/comments";
 import { validate_scene_code, type ValidationError as ValidationErrorType } from "@/lib/scene/validation";
 import { SCENE_ROOT_ID } from "@/lib/scene/constants";
+
+type ObjectRange = {
+  id: string;
+  startLine: number;
+  endLine: number;
+};
 
 type SceneEditorPanelProps = {
   className?: string;
@@ -72,14 +80,142 @@ export function SceneEditorPanel({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const breadcrumbsRef = useRef<HTMLDivElement>(null);
   const errorPanelRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
+  const monacoRef = useRef<Monaco | null>(null);
   const [copied, setCopied] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [errorPanelScrolled, setErrorPanelScrolled] = useState({ left: false, right: false });
 
-  const isObjectMode = selectedObjectId !== null && selectedObjectId !== SCENE_ROOT_ID;
-
   const selectedObjectIdRef = useRef(selectedObjectId);
+
+  const handleEditorMount = useCallback((editor: Parameters<OnMount>[0], monaco: Monaco) => {
+    editorRef.current = editor;
+    monacoRef.current = monaco;
+  }, []);
+
+  // Parse object line ranges for folding (stops at docs marker)
+  const parseObjectLineRanges = useCallback((code: string): ObjectRange[] => {
+    const ranges: ObjectRange[] = [];
+    const docsMarker = get_docs_marker();
+    const markerIndex = code.indexOf(docsMarker);
+    const codeToParse = markerIndex === -1 ? code : code.slice(0, markerIndex);
+
+    const lines = codeToParse.split("\n");
+    const methodRegex = /scene\.\w+\s*\(\s*\{/;
+    
+    let currentStart = -1;
+    let currentId: string | null = null;
+    let braceDepth = 0;
+
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+      const line = lines[lineIndex];
+      
+      if (currentStart === -1) {
+        const match = line.match(methodRegex);
+        if (match) {
+          currentStart = lineIndex + 1; // 1-indexed
+          braceDepth = 1;
+          // Try to extract id from this or following lines
+          const idMatch = line.match(/id\s*:\s*["']([^"']+)["']/);
+          if (idMatch) {
+            currentId = idMatch[1];
+          }
+        }
+      } else {
+        // Count braces
+        for (const char of line) {
+          if (char === "{") braceDepth++;
+          else if (char === "}") {
+            braceDepth--;
+            if (braceDepth === 0) {
+              // Found end of object
+              if (currentId) {
+                ranges.push({
+                  id: currentId,
+                  startLine: currentStart,
+                  endLine: lineIndex + 1,
+                });
+              }
+              currentStart = -1;
+              currentId = null;
+              break;
+            }
+          }
+        }
+        // Look for id if not found yet
+        if (!currentId && currentStart !== -1) {
+          const idMatch = line.match(/id\s*:\s*["']([^"']+)["']/);
+          if (idMatch) {
+            currentId = idMatch[1];
+          }
+        }
+      }
+    }
+
+    return ranges;
+  }, []);
+
+  // Unfold all regions
+  const unfold = useCallback(() => {
+    if (!editorRef.current) return;
+    editorRef.current.trigger('unfold', 'editor.unfoldAll', {});
+  }, []);
+
+  // Fold all objects except specified ones
+  const foldExcept = useCallback((exceptIds: string[]) => {
+    if (!editorRef.current) return;
+    const model = editorRef.current.getModel();
+    if (!model) return;
+
+    const ranges = parseObjectLineRanges(model.getValue());
+    
+    // Fold all objects EXCEPT the ones in exceptIds
+    const linesToFold = ranges
+      .filter(({ id }) => !exceptIds.includes(id))
+      .map(({ startLine }) => startLine - 1); // Convert to 0-based
+
+    if (linesToFold.length > 0) {
+      editorRef.current.trigger('fold', 'editor.fold', { selectionLines: linesToFold });
+    }
+  }, [parseObjectLineRanges]);
+
+  // Apply folding when selection changes
+  useEffect(() => {
+    if (!editorRef.current) return;
+    const editor = editorRef.current;
+
+    if (selectedObjectId && selectedObjectId !== SCENE_ROOT_ID) {
+      // First unfold all to reset any previous state
+      unfold();
+      
+      // Then fold all except selected - this keeps nested folds intact
+      setTimeout(() => {
+        foldExcept([selectedObjectId]);
+      }, 50);
+      
+      // Scroll to start of selected object after fold/unfold completes
+      // Use setTimeout to ensure Monaco has processed the fold/unfold operations
+      setTimeout(() => {
+        const model = editor.getModel();
+        if (!model) return;
+        
+        const ranges = parseObjectLineRanges(model.getValue());
+        const selectedRange = ranges.find(r => r.id === selectedObjectId);
+        if (selectedRange) {
+          const targetTop = editor.getTopForLineNumber(selectedRange.startLine);
+          editor.setScrollPosition({ scrollTop: targetTop });
+        }
+      }, 100);
+    } else {
+      unfold();
+      // Scroll to top when showing full scene
+      setTimeout(() => {
+        const targetTop = editor.getTopForLineNumber(1);
+        editor.setScrollPosition({ scrollTop: targetTop });
+      }, 100);
+    }
+  }, [selectedObjectId, unfold, foldExcept, parseObjectLineRanges]);
   
   const scrollBreadcrumbsToView = useCallback((activeId: string | null, breadcrumbs: string[], prevId: string | null) => {
     if (!breadcrumbsRef.current) return;
@@ -140,115 +276,76 @@ export function SceneEditorPanel({
     return () => window.cancelAnimationFrame(raf);
   }, [selectedObjectId, breadcrumbs, scrollBreadcrumbsToView]);
 
-  // Initialize localCode with pretty-printed code on mount
+  // Initialize localCode with formatted code and docs appended
   const [localCode, setLocalCode] = useState(() => {
-    if (isObjectMode) {
-      const objectCode = extractObjectCode(fullSceneCode, selectedObjectId!);
-      const method = extractMethodName(objectCode);
-      return pretty_print_scene_code(objectCode, method);
-    }
-    return pretty_print_scene_code(fullSceneCode);
+    const stripped = strip_docs(fullSceneCode);
+    const formatted = format_scene_code(stripped);
+    return append_docs(formatted);
   });
 
   // Track last synced code to detect external changes
   const lastSyncedCodeRef = useRef(fullSceneCode);
 
-  // Sync when fullSceneCode changes externally (e.g., code applied from chat)
-  // Re-inject comments since it's a new scene
+  // Sync when fullSceneCode changes externally (e.g., from LLM or page reload)
   useEffect(() => {
     if (fullSceneCode !== lastSyncedCodeRef.current) {
       lastSyncedCodeRef.current = fullSceneCode;
       
-      // Clear validation errors when scene/object changes
+      // Clear validation errors when scene changes
       set_validation_error(null);
       set_validation_errors([]);
       
-      // Strip existing comments first to prevent stacking
-      const cleanedCode = remove_comments(fullSceneCode);
+      // Strip docs, format, then append fresh docs
+      const stripped = strip_docs(fullSceneCode);
+      const formatted = format_scene_code(stripped);
+      const codeWithDocs = append_docs(formatted);
       
-      let newCode: string;
-      if (isObjectMode && selectedObjectId) {
-        const objectCode = extractObjectCode(cleanedCode, selectedObjectId);
-        const method = extractMethodName(objectCode);
-        newCode = pretty_print_scene_code(objectCode, method);
-      } else {
-        newCode = pretty_print_scene_code(cleanedCode);
-      }
-      
-      // Use raf to avoid synchronous setState in effect
       window.requestAnimationFrame(() => {
-        setLocalCode(newCode);
+        setLocalCode(codeWithDocs);
       });
     }
-  }, [fullSceneCode, isObjectMode, selectedObjectId]);
+  }, [fullSceneCode]);
 
   const validateAndApply = useCallback(
     (code: string) => {
-      if (!code.trim()) {
+      // Strip docs before validation and saving
+      const rawCode = strip_docs(code);
+      
+      if (!rawCode.trim()) {
         set_validation_error(null);
         set_validation_errors([]);
         set_warnings([]);
         
-        if (isObjectMode && selectedObjectId) {
-          // In object mode with empty code - remove the object from scene
-          const newSceneCode = removeObjectCode(fullSceneCode, selectedObjectId);
-          update_scene_code_storage?.(newSceneCode);
-          onApplySceneCode?.(newSceneCode);
-          // Exit object mode - select scene root
-          window.dispatchEvent(new CustomEvent("stemify:select-object", {
-            detail: { objectId: SCENE_ROOT_ID, startObjectId: SCENE_ROOT_ID, breadcrumbs: ["scene"] }
-          }));
-        } else {
-          // In scene mode with empty code - clear everything
-          update_scene_code_editor("");
-          update_scene_code_storage?.("");
-          onApplySceneCode?.("");
-        }
+        // In empty code - clear everything
+        update_scene_code_editor("");
+        update_scene_code_storage?.("");
+        onApplySceneCode?.("");
         return;
       }
 
-      let codeToValidate: string;
-      let codeToSave: string;
-
-      if (isObjectMode && selectedObjectId) {
-        const mergedSceneCode = replaceObjectCode(fullSceneCode, selectedObjectId, code);
-        codeToValidate = mergedSceneCode;
-        codeToSave = mergedSceneCode;
-      } else {
-        codeToValidate = code;
-        codeToSave = code;
-      }
-
-      const result = validate_scene_code(codeToValidate);
+      const result = validate_scene_code(rawCode);
       if (!result.ok) {
         set_validation_error(result.errors.length > 0 ? result.errors[0].message : "Invalid scene code");
         set_validation_errors(result.errors);
-        // Don't update store with invalid code - this would crash the viewport
-        // Just show errors in the editor
         return;
       }
 
       set_validation_error(null);
       set_validation_errors([]);
-      // Format code after successful validation (no comment injection)
-      const formattedCode = format_scene_code(codeToSave);
       
-      // Strip comments before saving to prevent stacking
-      const cleanCode = remove_comments(formattedCode);
-      
-      // Store warnings (not cleared, accumulated)
+      // Store warnings
       set_warnings(result.warnings);
       
-      // In object mode, don't update fullSceneCode via update_scene_code_editor
-      // to avoid triggering sync effect which would reset localCode.
-      // We still apply to viewport and save to storage.
-      if (!isObjectMode) {
-        update_scene_code_editor(cleanCode);
-      }
-      update_scene_code_storage?.(cleanCode);
-      onApplySceneCode?.(cleanCode);
+      // Save RAW code (no docs) to storage and viewport
+      // Note: NOT updating fullSceneCode here - sync only happens on external changes (LLM, reload)
+      update_scene_code_storage?.(rawCode);
+      onApplySceneCode?.(rawCode);
+      
+      // Re-inject docs for display
+      const codeWithDocs = append_docs(rawCode);
+      setLocalCode(codeWithDocs);
     },
-    [update_scene_code_editor, update_scene_code_storage, onApplySceneCode, fullSceneCode, isObjectMode, selectedObjectId]
+    [update_scene_code_editor, update_scene_code_storage, onApplySceneCode]
   );
 
   const handleCodeChange = useCallback(
@@ -294,30 +391,21 @@ export function SceneEditorPanel({
   }, [updateErrorPanelScrollState]);
 
   const handleCopy = useCallback(async () => {
-    let codeToCopy: string;
-    if (isObjectMode && selectedObjectId) {
-      const objectCode = extractObjectCode(localCode, selectedObjectId);
-      const method = extractMethodName(objectCode);
-      codeToCopy = pretty_print_scene_code(objectCode, method);
-    } else {
-      codeToCopy = pretty_print_scene_code(localCode);
-    }
-
-    await navigator.clipboard.writeText(codeToCopy);
+    await navigator.clipboard.writeText(localCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
-  }, [isObjectMode, selectedObjectId, localCode]);
+  }, [localCode]);
 
-  // Get code to display - object code or full scene code
-  const displayCode = useMemo(() => {
-    if (isObjectMode && selectedObjectId) {
-      const objectCode = extractObjectCode(localCode, selectedObjectId);
-      if (objectCode) {
-        return objectCode;
-      }
+  const handleGoToError = useCallback(() => {
+    const error = validationErrors[currentErrorIndex];
+    if (error?.line && editorRef.current) {
+      editorRef.current.revealLineInCenter(error.line);
+      editorRef.current.setPosition({ lineNumber: error.line, column: 1 });
+      editorRef.current.focus();
+    } else {
+      editorRef.current?.focus();
     }
-    return localCode;
-  }, [isObjectMode, selectedObjectId, localCode]);
+  }, [validationErrors, currentErrorIndex]);
 
   const showCopyButton = isHovered || isFocused;
 
@@ -352,13 +440,11 @@ export function SceneEditorPanel({
           <div 
             ref={breadcrumbsRef}
             className="flex items-center gap-1 text-xs text-white/60 overflow-x-auto scrollbar-hide"
-            style={{ scrollSnapType: 'x mandatory' }}
           >
             {breadcrumbs.map((id, index) => (
                 <span 
                   key={id} 
                   className="flex items-center gap-1 shrink-0"
-                  style={{ scrollSnapAlign: 'center' }}
                 >
                   {index > 0 && <span className="text-white/30">›</span>}
                   <button
@@ -446,264 +532,111 @@ export function SceneEditorPanel({
         )}
       </div>
 
-      {/* Error panel */}
-      {validationErrors.length > 0 && (
-        <div className="flex items-center gap-2 px-4 py-1 border-b border-white/5 shrink-0 bg-black/20">
-          {/* Prev/Next - hide if only 1 error */}
-          {validationErrors.length > 1 && (
-            <div className="flex items-center -mx-1">
-              <Button
-                variant="toolbar"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => prev_error()}
-                title="Previous error"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="toolbar"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => next_error()}
-                title="Next error"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
-
-          {/* Error counter */}
-          <span className="text-xs text-white/50 shrink-0">
-            {currentErrorIndex + 1}/{validationErrors.length}
-          </span>
-
-          {/* Error text - scrollable */}
-          <div className="flex-1 relative min-w-0">
-            <div
-              ref={errorPanelRef}
-              className="flex items-center overflow-x-auto scrollbar-hide text-xs text-red-400 whitespace-nowrap"
-              style={{ scrollSnapType: 'x mandatory' }}
-            >
-              <span style={{ scrollSnapAlign: 'center' }}>
-                {validationErrors[currentErrorIndex]?.message}
-              </span>
-            </div>
-            {/* Left fade */}
-            {errorPanelScrolled.left && (
-              <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-[var(--main-black)] to-transparent pointer-events-none" />
-            )}
-            {/* Right fade */}
-            {errorPanelScrolled.right && (
-              <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[var(--main-black)] to-transparent pointer-events-none" />
-            )}
-          </div>
-
-          {/* Go to - does nothing for now (placeholder) */}
-          <Button
-            variant="toolbar"
-            size="icon"
-            className="h-7 w-7 shrink-0"
-            title="Go to error (placeholder)"
-            onClick={() => { /* TODO: implement go to error line */ }}
-          >
-            <Crosshair className="h-4 w-4" />
-          </Button>
-        </div>
-      )}
-
       {/* Editor area */}
       <div 
         className={cn(
-          "flex-1 overflow-hidden relative",
+          "flex flex-col flex-1 overflow-hidden relative",
           isOpen ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"
         )}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         tabIndex={-1}
       >
-        <SceneCodeEditor
-          value={displayCode}
-          onChange={handleCodeChange}
-          error={validationError}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-        />
+        <div className="flex-1 min-h-0 relative">
+          <SceneCodeEditor
+            value={localCode}
+            onChange={handleCodeChange}
+            onEditorMount={handleEditorMount}
+            error={validationError}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+          />
+          
+          {/* Floating copy button - only visible when hovered or focused */}
+          <Button
+            variant="toolbar"
+            size="icon"
+            className={cn(
+              "absolute top-2 right-4 h-7 w-7 z-10 transition-opacity duration-200",
+              showCopyButton ? "opacity-100" : "opacity-0"
+            )}
+            onClick={handleCopy}
+            title="Copy code"
+          >
+            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+          </Button>
+        </div>
         
-        {/* Floating copy button - only visible when hovered or focused */}
-        <Button
-          variant="toolbar"
-          size="icon"
-          className={cn(
-            "absolute top-2 right-4 h-7 w-7 z-10 transition-opacity duration-200",
-            showCopyButton ? "opacity-100" : "opacity-0"
-          )}
-          onClick={handleCopy}
-          title="Copy code"
-        >
-          {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-        </Button>
+        {/* Error panel - below editor */}
+        {validationErrors.length > 0 && (
+          <div className="flex items-center gap-1 px-4 py-1 border-t border-b border-white/5 shrink-0">
+            {/* Prev/Next - only visible when > 1 error */}
+            {validationErrors.length > 1 && (
+              <>
+                <Button
+                  variant="toolbar"
+                  size="icon"
+                  className="h-6 w-4"
+                  onClick={() => prev_error()}
+                  title="Previous error"
+                >
+                  <ChevronLeft className="h-3 w-3" />
+                </Button>
+                <span className="text-xs text-white/50 shrink-0 tabular-nums">
+                  {currentErrorIndex + 1}/{validationErrors.length}
+                </span>
+                <Button
+                  variant="toolbar"
+                  size="icon"
+                  className="h-6 w-4"
+                  onClick={() => next_error()}
+                  title="Next error"
+                >
+                  <ChevronRight className="h-3 w-3" />
+                </Button>
+              </>
+            )}
+
+            {/* Single error - counter with space to text */}
+            {validationErrors.length === 1 && (
+              <span className="text-xs text-white/50 shrink-0 tabular-nums">
+                {currentErrorIndex + 1}/{validationErrors.length}
+              </span>
+            )}
+
+            {/* Error text - scrollable */}
+            <div className="flex-1 relative min-w-0 ml-2">
+              <div
+                ref={errorPanelRef}
+                className="flex items-center overflow-x-auto scrollbar-hide text-xs text-red-400 whitespace-nowrap"
+              >
+                <span>
+                  {validationErrors[currentErrorIndex]?.message}
+                </span>
+              </div>
+              {/* Left fade */}
+              {errorPanelScrolled.left && (
+                <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-[var(--main-black)] to-transparent pointer-events-none" />
+              )}
+              {/* Right fade */}
+              {errorPanelScrolled.right && (
+                <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[var(--main-black)] to-transparent pointer-events-none" />
+              )}
+            </div>
+
+            {/* Go to error line */}
+            <Button
+              variant="toolbar"
+              size="icon"
+              className="h-6 w-6 shrink-0"
+              title="Go to error"
+              onClick={handleGoToError}
+            >
+              <Crosshair className="h-3 w-3" />
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );
-}
-
-function extractObjectCode(sceneCode: string, objectId: string): string {
-  // Check if this is a tooltip: or label: prefixed ID
-  const isTooltip = objectId.startsWith('tooltip:');
-  const isLabel = objectId.startsWith('label:');
-  const actualId = isTooltip ? objectId.slice(8) : isLabel ? objectId.slice(6) : objectId;
-
-  // Find all object start positions
-  const starts: number[] = [];
-  const regex = /^scene\.\w+\s*\(/gm;
-  let match;
-
-  while ((match = regex.exec(sceneCode)) !== null) {
-    starts.push(match.index);
-  }
-
-  // If tooltip: or label: prefix, only search for addTooltip/addLabel
-  if (isTooltip || isLabel) {
-    const targetMethod = isTooltip ? 'addTooltip' : 'addLabel';
-    for (let i = 0; i < starts.length; i++) {
-      const start = starts[i];
-      const end = starts[i + 1] !== undefined ? starts[i + 1] : sceneCode.length;
-      const snippet = sceneCode.slice(start, end);
-
-      const methodMatch = snippet.match(/^scene\.(\w+)\s*\(/);
-      const methodName = methodMatch ? methodMatch[1] : null;
-
-      if (methodName !== targetMethod) continue;
-
-      const idPattern = new RegExp(`id:\\s*["\']${actualId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["\']`);
-      if (idPattern.test(snippet)) {
-        return extractWithBraceCounting(sceneCode, start);
-      }
-    }
-    return "";
-  }
-
-  // Find the main object (any scene.addX call except addTooltip/addLabel)
-  for (let i = 0; i < starts.length; i++) {
-    const start = starts[i];
-    const end = starts[i + 1] !== undefined ? starts[i + 1] : sceneCode.length;
-    const snippet = sceneCode.slice(start, end);
-
-    const methodMatch = snippet.match(/^scene\.(\w+)\s*\(/);
-    const methodName = methodMatch ? methodMatch[1] : null;
-
-    // Skip addTooltip and addLabel - show main object code
-    if (methodName === 'addTooltip' || methodName === 'addLabel') continue;
-
-    const idPattern = new RegExp(`id:\\s*["\']${actualId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["\']`);
-    if (idPattern.test(snippet)) {
-      return extractWithBraceCounting(sceneCode, start);
-    }
-  }
-
-  // Fall back to addTooltip or addLabel if no main object found
-  for (let i = 0; i < starts.length; i++) {
-    const start = starts[i];
-    const end = starts[i + 1] !== undefined ? starts[i + 1] : sceneCode.length;
-    const snippet = sceneCode.slice(start, end);
-
-    const methodMatch = snippet.match(/^scene\.(\w+)\s*\(/);
-    const methodName = methodMatch ? methodMatch[1] : null;
-
-    if (methodName !== 'addTooltip' && methodName !== 'addLabel') continue;
-
-    const idPattern = new RegExp(`id:\\s*["\']${actualId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["\']`);
-    if (idPattern.test(snippet)) {
-      return extractWithBraceCounting(sceneCode, start);
-    }
-  }
-
-  return "";
-}
-
-function extractWithBraceCounting(code: string, startIndex: number): string {
-  let braceDepth = 0;
-  let foundFirstBrace = false;
-  let parenDepth = 1; // We start after scene.addX(
-
-  for (let i = startIndex; i < code.length; i++) {
-    const char = code[i];
-
-    if (char === '(' && !foundFirstBrace) {
-      parenDepth++;
-    } else if (char === ')' && !foundFirstBrace) {
-      parenDepth--;
-      if (parenDepth === 0) {
-        return code.slice(startIndex, i + 1).trim();
-      }
-    } else if (char === '{') {
-      braceDepth++;
-      foundFirstBrace = true;
-    } else if (char === '}') {
-      braceDepth--;
-      if (foundFirstBrace && braceDepth === 0) {
-        // Look for closing paren and optional semicolon
-        let j = i + 1;
-        while (j < code.length && /\s/.test(code[j])) j++;
-        if (j < code.length && code[j] === ')') {
-          j++;
-          if (j < code.length && code[j] === ';') j++;
-          return code.slice(startIndex, j).trim();
-        }
-        return code.slice(startIndex, i + 1).trim();
-      }
-    }
-  }
-
-  return code.slice(startIndex).trim();
-}
-
-function extractMethodName(code: string): string {
-  const match = code.match(/scene\.(\w+)\s*\(/);
-  return match ? match[1] : "";
-}
-
-function replaceObjectCode(sceneCode: string, objectId: string, newObjectCode: string): string {
-  const oldObjectCode = extractObjectCode(sceneCode, objectId);
-  if (!oldObjectCode) return sceneCode;
-  
-  // Find the position of the old object code in the scene
-  const startIndex = sceneCode.indexOf(oldObjectCode);
-  if (startIndex === -1) return sceneCode;
-  
-  const endIndex = startIndex + oldObjectCode.length;
-  
-  // Replace with new object code, preserving surrounding whitespace
-  const before = sceneCode.slice(0, startIndex);
-  const after = sceneCode.slice(endIndex);
-  
-  return before + newObjectCode + after;
-}
-
-function removeObjectCode(sceneCode: string, objectId: string): string {
-  const objectCode = extractObjectCode(sceneCode, objectId);
-  if (!objectCode) return sceneCode;
-  
-  const startIndex = sceneCode.indexOf(objectCode);
-  if (startIndex === -1) return sceneCode;
-  
-  const endIndex = startIndex + objectCode.length;
-  
-  // Remove the object and clean up surrounding whitespace/newlines
-  let before = sceneCode.slice(0, startIndex);
-  let after = sceneCode.slice(endIndex);
-  
-  // Remove trailing whitespace/newlines before the removed object
-  before = before.replace(/\s+$/, "");
-  
-  // Remove leading whitespace/newlines after the removed object
-  after = after.replace(/^\s+/, "");
-  
-  // Ensure there's a newline between remaining objects if needed
-  if (before.length > 0 && after.length > 0) {
-    return before + "\n" + after;
-  }
-  
-  return before + after;
 }

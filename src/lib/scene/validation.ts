@@ -188,6 +188,23 @@ const PERFORMANCE_LIMITS = {
   max_animations: 3,
 };
 
+function get_line_number(code: string, position: number): number {
+  let line = 1;
+  for (let i = 0; i < position && i < code.length; i++) {
+    if (code[i] === "\n") line++;
+  }
+  return line;
+}
+
+function extract_line_from_error_msg(msg: string): number | undefined {
+  const match = msg.match(/(?:line\s*)(\d+)/i) || msg.match(/(\d+):/);
+  if (match) {
+    const line = parseInt(match[1], 10);
+    if (!isNaN(line)) return line;
+  }
+  return undefined;
+}
+
 export function validate_scene_code(scene_code: string): ValidationResult {
   const errors: ValidationError[] = [];
   const warnings: string[] = [];
@@ -197,9 +214,11 @@ export function validate_scene_code(scene_code: string): ValidationResult {
     new Function("scene", scene_code);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    const line = extract_line_from_error_msg(msg);
     errors.push({
       type: "syntax",
       message: `Syntax error: ${msg}`,
+      line,
     });
   }
 
@@ -216,9 +235,11 @@ export function validate_scene_code(scene_code: string): ValidationResult {
       if (!seen_methods.has(method)) {
         seen_methods.add(method);
         if (!ALLOWED_METHODS.has(method)) {
+          const line = get_line_number(scene_code, match.index);
           errors.push({
             type: "method",
             message: `Unknown method: "${method}"`,
+            line,
           });
         }
       }
@@ -241,11 +262,13 @@ export function validate_scene_code(scene_code: string): ValidationResult {
       if (!allowed) continue;
 
       const top_level_keys = extract_top_level_keys(scene_code, call_start);
-      for (const key of top_level_keys) {
+      for (const { key, position } of top_level_keys) {
         if (!allowed.has(key)) {
+          const line = get_line_number(scene_code, position);
           errors.push({
             type: "attribute",
             message: `Unknown attribute "${key}" in ${method}`,
+            line,
           });
         }
       }
@@ -268,16 +291,18 @@ export function validate_scene_code(scene_code: string): ValidationResult {
       if (!allowed) continue;
 
       const attributes = extract_attribute_values(scene_code, call_start);
-      for (const { key, value } of attributes) {
+      for (const { key, value, position } of attributes) {
         if (!allowed.has(key)) continue; // Skip unknown attributes (already reported)
         
         const validator = validate_value[key];
         if (validator) {
           const error = validator(value, key, method);
           if (error) {
+            const line = get_line_number(scene_code, position);
             errors.push({
               type: "value",
               message: `Invalid value for "${key}" in ${method}: ${error}`,
+              line,
             });
           }
         }
@@ -299,9 +324,11 @@ export function validate_scene_code(scene_code: string): ValidationResult {
       fn(mockScene);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      const line = extract_line_from_error_msg(msg);
       errors.push({
         type: "runtime",
         message: msg,
+        line,
       });
     }
   }
@@ -317,8 +344,8 @@ export function validate_scene_code(scene_code: string): ValidationResult {
   };
 }
 
-function extract_attribute_values(code: string, start_pos: number): Array<{ key: string; value: unknown }> {
-  const result: Array<{ key: string; value: unknown }> = [];
+function extract_attribute_values(code: string, start_pos: number): Array<{ key: string; value: unknown; position: number }> {
+  const result: Array<{ key: string; value: unknown; position: number }> = [];
   
   // Find the object literal in the code (from { to matching })
   const objStart = code.indexOf("{", start_pos);
@@ -340,7 +367,8 @@ function extract_attribute_values(code: string, start_pos: number): Array<{ key:
   
   if (objEnd === -1) return result;
   
-  let objCode = code.slice(objStart, objEnd + 1);
+  const originalObjCode = code.slice(objStart, objEnd + 1);
+  let objCode = originalObjCode;
   
   // Remove comments first - line comments (//) and block comments (/* */)
   objCode = objCode.replace(/\/\/.*$/gm, ""); // Remove // comments
@@ -355,6 +383,71 @@ function extract_attribute_values(code: string, start_pos: number): Array<{ key:
   objCode = objCode.replace(/'(?:[^'\\]|\\.)*'/g, '"__STRING__"');
   objCode = objCode.replace(/"(?:[^"\\]|\\.)*"/g, '"__STRING__"');
   
+  // Helper to extract value from original code at a given position
+  const extractValueFromOriginal = (afterColonPos: number): string => {
+    // Skip whitespace after colon
+    let i = afterColonPos;
+    while (i < originalObjCode.length && /\s/.test(originalObjCode[i])) i++;
+    
+    const startChar = originalObjCode[i];
+    
+    // Handle string literals
+    if (startChar === '"' || startChar === "'" || startChar === "`") {
+      let end = i + 1;
+      while (end < originalObjCode.length) {
+        if (originalObjCode[end] === "\\") {
+          end += 2; // Skip escape sequence
+          continue;
+        }
+        if (originalObjCode[end] === startChar) {
+          end++; // Include closing quote
+          break;
+        }
+        end++;
+      }
+      return originalObjCode.slice(i, end);
+    }
+    
+    // Handle arrays and objects
+    if (startChar === "[" || startChar === "{") {
+      const openChar = startChar;
+      const closeChar = startChar === "[" ? "]" : "}";
+      let depth = 1;
+      let end = i + 1;
+      let inString = false;
+      let stringChar = "";
+      
+      while (end < originalObjCode.length && depth > 0) {
+        const c = originalObjCode[end];
+        if (!inString) {
+          if (c === '"' || c === "'" || c === "`") {
+            inString = true;
+            stringChar = c;
+          } else if (c === openChar) {
+            depth++;
+          } else if (c === closeChar) {
+            depth--;
+          }
+        } else {
+          if (c === "\\") {
+            end++; // Skip next char
+          } else if (c === stringChar) {
+            inString = false;
+          }
+        }
+        end++;
+      }
+      return originalObjCode.slice(i, end);
+    }
+    
+    // Handle simple values (numbers, booleans, identifiers)
+    let end = i;
+    while (end < originalObjCode.length && !/[,\n}]/.test(originalObjCode[end])) {
+      end++;
+    }
+    return originalObjCode.slice(i, end).trim();
+  };
+  
   // Use a simpler regex approach - find all key: value pairs
   // Match: key: value with support for nested arrays/objects
   const kvRegex = /([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([^\n,}]+)/g;
@@ -362,36 +455,72 @@ function extract_attribute_values(code: string, start_pos: number): Array<{ key:
   
   while ((match = kvRegex.exec(objCode)) !== null) {
     const key = match[1];
-    const valueStr = match[2].trim();
+    const placeholderValue = match[2].trim();
     
     // Skip empty values
-    if (!valueStr) continue;
+    if (!placeholderValue) continue;
+    
+    // Skip if this is a placeholder from string replacement
+    if (placeholderValue === '"__STRING__"') {
+      // Extract actual value from originalObjCode
+      const keyPattern = new RegExp(`\\b${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:`);
+      const origMatch = originalObjCode.match(keyPattern);
+      if (origMatch && origMatch.index !== undefined) {
+        const colonPos = originalObjCode.indexOf(':', origMatch.index);
+        const actualValueStr = extractValueFromOriginal(colonPos + 1);
+        const position = objStart + origMatch.index;
+        
+        // Parse the actual string value
+        let value: unknown;
+        try {
+          value = JSON.parse(actualValueStr);
+        } catch {
+          // For single quotes or backticks, extract content directly
+          if ((actualValueStr.startsWith("'") && actualValueStr.endsWith("'")) ||
+              (actualValueStr.startsWith("`") && actualValueStr.endsWith("`"))) {
+            value = actualValueStr.slice(1, -1);
+          } else {
+            continue;
+          }
+        }
+        result.push({ key, value, position });
+      }
+      continue;
+    }
+    
+    // Find the key position in the original code
+    const keyPattern = new RegExp(`\\b${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:`);
+    const origMatch = originalObjCode.match(keyPattern);
+    const position = origMatch ? objStart + origMatch.index! : objStart;
     
     // Try to parse the value
     let value: unknown;
     try {
-      value = JSON.parse(valueStr);
+      value = JSON.parse(placeholderValue);
     } catch {
       // If JSON parse fails, it might be a bare identifier or expression
       // Try to handle common cases
-      if (valueStr === "true") value = true;
-      else if (valueStr === "false") value = false;
-      else if (valueStr === "null") value = null;
-      else if (!isNaN(Number(valueStr))) value = Number(valueStr);
-      else continue; // Skip unparseable values
+      if (placeholderValue === "true") value = true;
+      else if (placeholderValue === "false") value = false;
+      else if (placeholderValue === "null") value = null;
+      else if (!isNaN(Number(placeholderValue))) value = Number(placeholderValue);
+      else if ((placeholderValue.startsWith('"') && placeholderValue.endsWith('"')) || 
+               (placeholderValue.startsWith("'") && placeholderValue.endsWith("'"))) {
+        // Extract string literal content for validation
+        value = placeholderValue.slice(1, -1);
+      } else {
+        continue; // Skip truly unparseable values (expressions, etc.)
+      }
     }
     
-    // Skip placeholder values from string replacement - we can't validate the actual string content
-    if (value === "__STRING__") continue;
-    
-    result.push({ key, value });
+    result.push({ key, value, position });
   }
   
   return result;
 }
 
-function extract_top_level_keys(code: string, start_pos: number): string[] {
-  const keys: string[] = [];
+function extract_top_level_keys(code: string, start_pos: number): Array<{ key: string; position: number }> {
+  const keys: Array<{ key: string; position: number }> = [];
   
   // Find the opening {
   const objStart = code.indexOf("{", start_pos);
@@ -470,7 +599,7 @@ function extract_top_level_keys(code: string, start_pos: number): string[] {
       }
     } else {
       if (char === ":") {
-        keys.push(code.slice(keyStart, i).trim());
+        keys.push({ key: code.slice(keyStart, i).trim(), position: keyStart });
         keyStart = -1;
       } else if (!/[a-zA-Z0-9_]/.test(char)) {
         keyStart = -1;

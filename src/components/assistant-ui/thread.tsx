@@ -11,16 +11,17 @@ import {
 } from "@assistant-ui/react";
 import { useAui } from "@assistant-ui/store";
 import { ArrowDownIcon, ArrowUp, RotateCcwIcon, Square } from "lucide-react";
-import { useEffect, useRef, useState, type FC } from "react";
 
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { ChatStatusBanner } from "@/components/chat/ChatStatusBanner";
 import { RecentScenes } from "@/components/chat/RecentScenes";
 import { OpenRouterModelSelector } from "@/components/openrouter/OpenRouterModelSelector";
+import { useChatThread } from "@/components/chat/ChatRuntimeProvider";
 import { Button } from "@/components/ui/button";
 import { KeyboardShortcut } from "@/components/ui/keyboard-shortcut";
 import { load_chat_mode, save_chat_mode, type ChatMode } from "@/lib/chat/mode";
 import { useChatPrerequisites } from "@/lib/chat/prerequisites";
+import { useEffect, useRef, useState, type FC } from "react";
 
 const SCROLLBAR_STYLES = (
   <style>{`
@@ -68,6 +69,7 @@ export const Thread: FC<ThreadProps> = ({ show_recent_scenes, thread_id }) => {
             components={{
               UserMessage,
               AssistantMessage,
+              EditComposer,
             }}
           />
         </ThreadPrimitive.Viewport>
@@ -78,7 +80,7 @@ export const Thread: FC<ThreadProps> = ({ show_recent_scenes, thread_id }) => {
           </div>
         )}
 
-        <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto flex w-full max-w-2xl flex-col gap-4 overflow-visible rounded-t-3xl bg-[var(--main-black)]/90 px-4 pb-4 pt-2 backdrop-blur">
+        <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto flex w-full max-w-2xl flex-col gap-4 overflow-visible rounded-t-3xl bg-(--main-black)/90 px-4 pb-4 pt-2 backdrop-blur">
           <ThreadScrollToBottom viewportRef={viewport_ref} thread_id={thread_id} />
           <ChatStatusBanner />
           <Composer />
@@ -411,10 +413,13 @@ const UserMessage: FC = () => {
   const mode = useMessage(
     (m) => m.metadata?.custom?.stemify_mode as "ask" | "build" | undefined,
   );
+  const role = useMessage((m) => m.role);
   const model_id = useMessage(
     (m) => m.metadata?.custom?.model_id as string | undefined,
   );
   const created_at = useMessage((m) => m.createdAt as Date | undefined);
+  const message_id = useMessage((m) => m.id);
+  const { trimToMessage } = useChatThread() ?? {};
 
   const model_name = extract_model_name(model_id);
   const time_str = created_at
@@ -422,6 +427,11 @@ const UserMessage: FC = () => {
     : null;
 
   const show_meta = mode && (mode === "ask" || mode === "build");
+  const is_user = role === "user";
+
+  const handle_delete = () => {
+    trimToMessage?.(message_id);
+  };
 
   return (
     <MessagePrimitive.Root
@@ -434,12 +444,30 @@ const UserMessage: FC = () => {
             <MessagePrimitive.Parts />
           </div>
           {show_meta && (
-            <div className="mt-0.5 flex justify-end pr-4 opacity-0 group-hover:opacity-100">
-              <span className="text-[10px] font-medium tracking-wide text-muted">
-                {mode === "ask" ? "ASK" : "BUILD"}
-                {model_name && ` • ${model_name}`}
-                {time_str && ` • ${time_str}`}
-              </span>
+            <div className="mt-1 flex items-center justify-end pr-2 opacity-0 group-hover:opacity-100">
+              <ActionBarPrimitive.Root className="flex items-center gap-1.5 text-[10px] text-white/60">
+                {is_user && (
+                  <>
+                    <ActionBarPrimitive.Edit asChild>
+                      <span className="cursor-pointer rounded px-0.5 py-0.5 hover:text-white/90">Edit</span>
+                    </ActionBarPrimitive.Edit>
+                    <span>•</span>
+                  </>
+                )}
+                <button
+                  type="button"
+                  className="cursor-pointer rounded px-0.5 py-0.5 hover:text-white/90"
+                  onClick={handle_delete}
+                >
+                  Delete
+                </button>
+                <span>•</span>
+                <span className="font-medium tracking-wide text-white/60">
+                  {mode === "ask" ? "ASK" : "BUILD"}
+                  {model_name && ` • ${model_name}`}
+                  {time_str && ` • ${time_str}`}
+                </span>
+              </ActionBarPrimitive.Root>
             </div>
           )}
         </div>
@@ -507,12 +535,14 @@ const AssistantMessage: FC = () => {
             </div>
 
             {show_meta && (
-              <div className="mt-0.5 flex px-4 opacity-0 group-hover:opacity-100">
-                <span className="text-[10px] font-medium tracking-wide text-muted">
-                  {mode === "ask" ? "ASK" : mode === "build" ? "BUILD" : "FIX"}
-                  {model_name && ` • ${model_name}`}
-                  {time_str && ` • ${time_str}`}
-                </span>
+              <div className="mt-1 flex items-center px-4 opacity-0 group-hover:opacity-100">
+                <ActionBarPrimitive.Root className="flex items-center gap-1.5 text-[10px] text-white/60">
+                  <span className="font-medium tracking-wide">
+                    {mode === "ask" ? "ASK" : mode === "build" ? "BUILD" : "FIX"}
+                    {model_name && ` • ${model_name}`}
+                    {time_str && ` • ${time_str}`}
+                  </span>
+                </ActionBarPrimitive.Root>
               </div>
             )}
           </div>
@@ -536,6 +566,58 @@ const AssistantMessage: FC = () => {
           </ActionBarPrimitive.Reload>
         </div>
       </MessagePrimitive.Error>
+    </MessagePrimitive.Root>
+  );
+};
+
+const EditComposer: FC = () => {
+  const message_mode = useMessage(
+    (m) => m.metadata?.custom?.stemify_mode as "ask" | "build" | undefined,
+  );
+
+  const getSendButtonStyles = () => {
+    const base = "h-8 min-w-8 gap-2 px-3 text-xs font-semibold uppercase tracking-wide border-2 shrink-0 justify-between cursor-pointer rounded-lg";
+
+    if (message_mode === "build") {
+      return `${base} bg-amber-400 text-black border-amber-400 hover:bg-amber-500`;
+    }
+    return `${base} bg-transparent text-amber-400 border-amber-400 hover:bg-amber-400/10`;
+  };
+
+  const sendLabel = message_mode === "build" ? "BUILD" : "ASK";
+
+  return (
+    <MessagePrimitive.Root className="mx-auto w-full max-w-2xl pb-2" data-role="user">
+      <div className="px-2">
+        <ComposerPrimitive.Root className="rounded-outer border border-white/5 bg-white/3 p-2">
+          <ComposerPrimitive.Input
+            className="mb-2 min-h-10 w-full max-h-40 resize-none overflow-y-auto bg-transparent px-2 text-sm text-primary outline-none placeholder:text-placeholder"
+            autoFocus
+            submitOnEnter={true}
+          />
+          <div className="flex items-center justify-end gap-2">
+            <ComposerPrimitive.Cancel asChild>
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 min-w-8 gap-2 px-3 text-xs font-semibold uppercase tracking-wide border-0 shrink-0 justify-between cursor-pointer rounded-lg bg-transparent text-white/60 border-2 border-white/10 hover:bg-white/5"
+              >
+                Cancel
+              </Button>
+            </ComposerPrimitive.Cancel>
+            <ComposerPrimitive.Send asChild>
+              <Button
+                type="button"
+                size="sm"
+                className={getSendButtonStyles()}
+              >
+                <span className="text-left">{sendLabel}</span>
+                <ArrowUp className="h-3.5 w-3.5 shrink-0" />
+              </Button>
+            </ComposerPrimitive.Send>
+          </div>
+        </ComposerPrimitive.Root>
+      </div>
     </MessagePrimitive.Root>
   );
 };

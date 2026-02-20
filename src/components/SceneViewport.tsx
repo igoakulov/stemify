@@ -243,7 +243,7 @@ export function SceneViewport(props: SceneViewportProps) {
     // Apply new highlight
     applyEmissiveToMesh(mesh, HOVER_COLOR, HOVER_OPACITY);
     highlighted_mesh_ref.current = mesh;
-  }, []);
+  }, [clearHighlight]);
 
   // Update ref when applyHoverHighlight changes
   useEffect(() => {
@@ -727,7 +727,7 @@ export function SceneViewport(props: SceneViewportProps) {
       runtime_ref.current = null;
       registry_ref.current = null;
     };
-  }, [props.sceneCode, props.sceneId, handleClick, handleMouseMove, handleMouseLeave, handleMouseDown, clearHighlight]);
+  }, [props.sceneCode, props.sceneId, props.gridSnap, handleClick, handleMouseMove, handleMouseLeave, handleMouseDown, handleDrillUp, handleDrillDown, handleLabelClick, clearHighlight]);
 
   // Handle grid snap toggle
   useEffect(() => {
@@ -785,7 +785,8 @@ export function SceneViewport(props: SceneViewportProps) {
         // If validation fails, keep existing scene - don't clear
       }
     }
-  }, [props.gridSnap, props.sceneCode, props.onGridChange]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.sceneCode, props.sceneId, props.gridSnap, props.onGridChange]);
 
   return (
     <div

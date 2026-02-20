@@ -300,7 +300,8 @@ export function AppShell() {
                 onBreadcrumbClick={(id, index) => {
                   // index 0 = "scene" - dispatch SCENE_ROOT_ID to show full scene code
                   const objectId = index === 0 ? SCENE_ROOT_ID : id;
-                  window.dispatchEvent(new CustomEvent("stemify:select-object", { detail: { objectId, startObjectId, breadcrumbs } }));
+                  const newStartObjectId = index === 0 ? SCENE_ROOT_ID : startObjectId;
+                  window.dispatchEvent(new CustomEvent("stemify:select-object", { detail: { objectId, startObjectId: newStartObjectId, breadcrumbs } }));
                 }}
                 update_scene_code_editor={update_scene_code_editor}
                 update_scene_code_storage={update_scene_code_storage}

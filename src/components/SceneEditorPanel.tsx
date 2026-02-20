@@ -76,7 +76,6 @@ export function SceneEditorPanel({
   const [isHovered, setIsHovered] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [errorPanelScrolled, setErrorPanelScrolled] = useState({ left: false, right: false });
-  const [breadcrumbsScrolled, setBreadcrumbsScrolled] = useState({ left: false, right: false });
 
   const isObjectMode = selectedObjectId !== null && selectedObjectId !== SCENE_ROOT_ID;
 
@@ -294,25 +293,6 @@ export function SceneEditorPanel({
     return () => panel.removeEventListener("scroll", updateErrorPanelScrollState);
   }, [updateErrorPanelScrollState]);
 
-  const updateBreadcrumbsScrollState = useCallback(() => {
-    if (!breadcrumbsRef.current) return;
-    const { scrollLeft, scrollWidth, clientWidth } = breadcrumbsRef.current;
-    setBreadcrumbsScrolled({
-      left: scrollLeft > 0,
-      right: scrollLeft < scrollWidth - clientWidth - 1,
-    });
-  }, []);
-
-  useEffect(() => {
-    const container = breadcrumbsRef.current;
-    if (!container) return;
-    
-    container.addEventListener("scroll", updateBreadcrumbsScrollState);
-    updateBreadcrumbsScrollState();
-    
-    return () => container.removeEventListener("scroll", updateBreadcrumbsScrollState);
-  }, [updateBreadcrumbsScrollState]);
-
   const handleCopy = useCallback(async () => {
     let codeToCopy: string;
     if (isObjectMode && selectedObjectId) {
@@ -391,6 +371,7 @@ export function SceneEditorPanel({
                       // "scene" (index 0) - select scene to show full scene code
                       if (index === 0) {
                         onBreadcrumbClick(id, index);
+                        onOpen?.();
                       } else if (id === selectedObjectId) {
                         onOpen?.();
                       } else {

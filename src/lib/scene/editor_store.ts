@@ -58,10 +58,6 @@ export function select_object(id: string | null, breadcrumbs: string[] = [], sta
   useSceneEditorStore.getState().setSelectedObject(id, breadcrumbs, startObjectId);
 }
 
-export function hover_object(id: string | null): void {
-  useSceneEditorStore.getState().setHoveredObject(id);
-}
-
 export function get_start_object_id(): string | null {
   return useSceneEditorStore.getState().startObjectId;
 }

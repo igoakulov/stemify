@@ -131,21 +131,21 @@ export function SceneViewport(props: SceneViewportProps) {
 
   // Helper to apply highlight to a mesh or all children of a group
   const applyEmissiveToMesh = (mesh: THREE.Object3D, color: number, opacity: number) => {
-    if (mesh instanceof THREE.Mesh && mesh.material) {
-      const mat = mesh.material as THREE.MeshStandardMaterial;
-      if (mat.emissive) {
-        mat.emissive.setHex(color);
-        mat.emissiveIntensity = opacity;
+    const applyToMaterial = (mat: THREE.MeshStandardMaterial) => {
+      if (!mat.emissive) {
+        mat.emissive = new THREE.Color(0x000000);
       }
+      mat.emissive.setHex(color);
+      mat.emissiveIntensity = opacity;
+    };
+
+    if (mesh instanceof THREE.Mesh && mesh.material) {
+      applyToMaterial(mesh.material as THREE.MeshStandardMaterial);
     } else if (mesh instanceof THREE.Group) {
       // For groups (like cylinders), apply to all children
       mesh.traverse((child) => {
         if (child instanceof THREE.Mesh && child.material) {
-          const mat = child.material as THREE.MeshStandardMaterial;
-          if (mat.emissive) {
-            mat.emissive.setHex(color);
-            mat.emissiveIntensity = opacity;
-          }
+          applyToMaterial(child.material as THREE.MeshStandardMaterial);
         }
       });
     }
@@ -153,20 +153,20 @@ export function SceneViewport(props: SceneViewportProps) {
 
   // Helper to clear highlight from a mesh or all children of a group
   const clearEmissiveFromMesh = (mesh: THREE.Object3D) => {
-    if (mesh instanceof THREE.Mesh && mesh.material) {
-      const mat = mesh.material as THREE.MeshStandardMaterial;
-      if (mat.emissive) {
-        mat.emissive.setHex(0x000000);
-        mat.emissiveIntensity = 0;
+    const clearFromMaterial = (mat: THREE.MeshStandardMaterial) => {
+      if (!mat.emissive) {
+        mat.emissive = new THREE.Color(0x000000);
       }
+      mat.emissive.setHex(0x000000);
+      mat.emissiveIntensity = 0;
+    };
+
+    if (mesh instanceof THREE.Mesh && mesh.material) {
+      clearFromMaterial(mesh.material as THREE.MeshStandardMaterial);
     } else if (mesh instanceof THREE.Group) {
       mesh.traverse((child) => {
         if (child instanceof THREE.Mesh && child.material) {
-          const mat = child.material as THREE.MeshStandardMaterial;
-          if (mat.emissive) {
-            mat.emissive.setHex(0x000000);
-            mat.emissiveIntensity = 0;
-          }
+          clearFromMaterial(child.material as THREE.MeshStandardMaterial);
         }
       });
     }
@@ -471,13 +471,6 @@ export function SceneViewport(props: SceneViewportProps) {
 
     window.addEventListener("stemify:camera-reset", on_reset);
 
-    // Save camera position before re-creating scene (preserve user's view)
-    const existingRuntime = runtime_ref.current;
-    if (existingRuntime) {
-      saved_camera_position_ref.current = existingRuntime.camera.position.clone();
-      saved_camera_target_ref.current = existingRuntime.controls.target.clone();
-    }
-
     // Large ground grid: 20x20 units with 0.5 unit spacing
     const grid = new THREE.GridHelper(20, 40);
     grid.material = runtime.materials.grid_line;
@@ -494,6 +487,11 @@ export function SceneViewport(props: SceneViewportProps) {
       runtime.controls.update();
       runtime.renderer.render(runtime.scene, runtime.camera);
       runtime.label_renderer.render(runtime.scene, runtime.camera);
+      
+      // Continuously save camera position (survives HMR/component remounts)
+      saved_camera_position_ref.current = runtime.camera.position.clone();
+      saved_camera_target_ref.current = runtime.controls.target.clone();
+      
       raf_ref.current = window.requestAnimationFrame(loop);
     };
     raf_ref.current = window.requestAnimationFrame(loop);
@@ -548,8 +546,21 @@ export function SceneViewport(props: SceneViewportProps) {
         return;
       }
 
+      // Restore camera position after scene execution (preserve user's view)
+      if (saved_camera_position_ref.current && saved_camera_target_ref.current) {
+        runtime.camera.position.copy(saved_camera_position_ref.current);
+        runtime.controls.target.copy(saved_camera_target_ref.current);
+        runtime.controls.update();
+      }
+
       // After execution, recalculate breadcrumbs from startObjectId
-      const startId = get_start_object_id();
+      let startId = get_start_object_id();
+      
+      // If no startId but there's scene code, default to scene root
+      if (!startId && code && code.trim().length > 0) {
+        startId = SCENE_ROOT_ID;
+      }
+      
       if (startId && registry_ref.current?.get_mesh(startId)) {
         const newBreadcrumbs = registry_ref.current.find_path_to_root(startId);
         window.dispatchEvent(new CustomEvent("stemify:select-object", { 
@@ -687,18 +698,6 @@ export function SceneViewport(props: SceneViewportProps) {
       }
     }
 
-    // Initialize breadcrumbs after scene setup (handles initial load)
-    const initBreadcrumbs = () => {
-      const store = useSceneEditorStore.getState();
-      if (!store.breadcrumbs || store.breadcrumbs.length === 0) {
-        // Calculate directly instead of dispatching empty and relying on recalc
-        const newBreadcrumbs = registry_ref.current?.find_path_to_root(SCENE_ROOT_ID) ?? ["scene"];
-        window.dispatchEvent(new CustomEvent("stemify:select-object", { 
-          detail: { objectId: SCENE_ROOT_ID, startObjectId: SCENE_ROOT_ID, breadcrumbs: newBreadcrumbs } 
-        }));
-      }
-    };
-
     // Add event listeners for selection and hover
     canvas.addEventListener("mousedown", handleMouseDown);
     canvas.addEventListener("click", handleClick);
@@ -710,13 +709,7 @@ export function SceneViewport(props: SceneViewportProps) {
     window.addEventListener("stemify:drill-up", handleDrillUp as EventListener);
     window.addEventListener("stemify:drill-down", handleDrillDown as EventListener);
 
-    // Use double raf to ensure this runs after all effects and scene is ready
-    const raf1 = window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(initBreadcrumbs);
-    });
-
     return () => {
-      window.cancelAnimationFrame(raf1);
       window.removeEventListener("stemify:camera-reset", on_reset);
       canvas.removeEventListener("mousedown", handleMouseDown);
       canvas.removeEventListener("click", handleClick);
@@ -781,6 +774,13 @@ export function SceneViewport(props: SceneViewportProps) {
           }
           
           execute_scene_code(props.sceneCode, scene_api);
+          
+          // Restore camera position after scene execution (camera was saved continuously in render loop)
+          if (saved_camera_position_ref.current && saved_camera_target_ref.current) {
+            runtime_ref.current.camera.position.copy(saved_camera_position_ref.current);
+            runtime_ref.current.controls.target.copy(saved_camera_target_ref.current);
+            runtime_ref.current.controls.update();
+          }
         }
         // If validation fails, keep existing scene - don't clear
       }

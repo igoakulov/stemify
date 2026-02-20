@@ -1,15 +1,10 @@
 import * as THREE from "three";
 
-import type { Vec3 } from "@/lib/scene/types";
+import type { Vec3, AxisRange } from "@/lib/scene/types";
 
-function v3(p: Vec3): THREE.Vector3 {
-  return new THREE.Vector3(p.x, p.y, p.z);
+function v3(p: Vec3 | undefined): THREE.Vector3 {
+  return new THREE.Vector3(p?.[0] ?? 0, p?.[1] ?? 0, p?.[2] ?? 0);
 }
-
-export type AxisRange = {
-  start?: number;
-  end?: number;
-};
 
 export type AxesConfig = {
   x?: AxisRange;
@@ -21,11 +16,7 @@ export type AxesConfig = {
 
 export function create_axes_group(config: AxesConfig = {}): THREE.Group {
   const length = config.length ?? 5;
-  const position = config.position ?? { x: 0, y: 0, z: 0 };
-
-  const x_range = config.x ?? { end: length };
-  const y_range = config.y ?? { end: length };
-  const z_range = config.z ?? { end: length };
+  const position = config.position ?? [0, 0, 0];
 
   const group = new THREE.Group();
   group.position.copy(v3(position));
@@ -34,15 +25,17 @@ export function create_axes_group(config: AxesConfig = {}): THREE.Group {
   const head_radius = axis_radius * 2.2;
   const head_length = axis_radius * 6.0;
 
-  const make_axis = (dir: THREE.Vector3, range: AxisRange, color: string) => {
+  const make_axis = (dir: THREE.Vector3, range: AxisRange | undefined, color: string) => {
+    if (!range || range.length === 0) return;
+
+    const neg_end = range[0];
+    const pos_end = range[1];
+
     const axis_mat = new THREE.MeshStandardMaterial({
       color,
       roughness: 0.55,
       metalness: 0.05,
     });
-
-    const neg_end = range.start ?? 0;
-    const pos_end = range.end ?? length;
 
     if (neg_end < 0) {
       const neg_length = -neg_end;
@@ -77,9 +70,9 @@ export function create_axes_group(config: AxesConfig = {}): THREE.Group {
     }
   };
 
-  make_axis(new THREE.Vector3(1, 0, 0), x_range, "#F25C54");
-  make_axis(new THREE.Vector3(0, 1, 0), y_range, "#2FBF71");
-  make_axis(new THREE.Vector3(0, 0, 1), z_range, "#2D7FF9");
+  make_axis(new THREE.Vector3(1, 0, 0), config.x, "#F25C54");
+  make_axis(new THREE.Vector3(0, 1, 0), config.y, "#2FBF71");
+  make_axis(new THREE.Vector3(0, 0, 1), config.z, "#2D7FF9");
 
   return group;
 }

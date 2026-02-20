@@ -1,16 +1,16 @@
 import type * as THREE from "three";
 
-export type Vec3 = { x: number; y: number; z: number };
+export type Vec3 = number[];
 
 export type ObjectMeta = {
   id: string;
   type: string;
 };
 
-// 2D Primitives
 export type AddPointConfig = {
   id: string;
-  center: Vec3;
+  center?: Vec3;
+  shift?: Vec3;
   color?: string;
   selectable?: boolean;
 };
@@ -29,6 +29,7 @@ export type AddLineConfig = {
   arrow?: "none" | "start" | "end" | "both";
   direction?: Vec3;
   rotation?: number;
+  shift?: Vec3;
   color?: string;
   opacity?: number;
   selectable?: boolean;
@@ -37,6 +38,7 @@ export type AddLineConfig = {
 export type AddPoly2DConfig = {
   id: string;
   points: Vec3[];
+  shift?: Vec3;
   color?: string;
   opacity?: number;
   direction?: Vec3;
@@ -46,24 +48,26 @@ export type AddPoly2DConfig = {
 
 export type AddCircleConfig = {
   id: string;
-  center: Vec3;
+  center?: Vec3;
+  shift?: Vec3;
   radius: number;
   direction?: Vec3;
   stretch?: Vec3;
-  slice?: { start: number; end: number } | number;
+  anglecut?: [number, number] | number;
   rotation?: number;
   color?: string;
   opacity?: number;
   selectable?: boolean;
 };
 
-// 3D Primitives
 export type AddSphereConfig = {
   id: string;
-  center: Vec3;
+  center?: Vec3;
+  shift?: Vec3;
   radius: number;
   stretch?: Vec3;
-  slice?: { start: number; end: number } | number;
+  anglecut?: [number, number] | number;
+  flatcut?: [number, number] | number;
   direction?: Vec3;
   rotation?: number;
   color?: string;
@@ -74,8 +78,9 @@ export type AddSphereConfig = {
 export type AddCylinderConfig = {
   id: string;
   points: Vec3[];
+  shift?: Vec3;
   radius: number[];
-  slice?: { start: number; end: number } | number;
+  anglecut?: [number, number] | number;
   direction?: Vec3;
   rotation?: number;
   color?: string;
@@ -86,6 +91,7 @@ export type AddCylinderConfig = {
 export type AddPoly3DConfig = {
   id: string;
   points: Vec3[];
+  shift?: Vec3;
   color?: string;
   opacity?: number;
   direction?: Vec3;
@@ -95,22 +101,19 @@ export type AddPoly3DConfig = {
 
 export type AddDonutConfig = {
   id: string;
-  center: Vec3;
+  center?: Vec3;
+  shift?: Vec3;
   radius: number;
   thickness: number;
   direction?: Vec3;
-  slice?: { start: number; end: number } | number;
+  anglecut?: [number, number] | number;
   rotation?: number;
   color?: string;
   opacity?: number;
   selectable?: boolean;
 };
 
-// Infrastructure
-export type AxisRange = {
-  start?: number;
-  end?: number;
-};
+export type AxisRange = [number, number] | [];
 
 export type AddAxesConfig = {
   id?: string;
@@ -136,6 +139,7 @@ export type AddGroupConfig = {
   children: string[];
   direction?: Vec3;
   rotation?: number;
+  shift?: Vec3;
   selectable?: boolean;
 };
 
@@ -147,6 +151,8 @@ export type AddAnimationConfig = {
 export type AddCustomMeshConfig = {
   id: string;
   createFn: string;
+  center?: Vec3;
+  shift?: Vec3;
   color?: string;
   direction?: Vec3;
   rotation?: number;
@@ -160,19 +166,16 @@ export type AddTooltipConfig = {
 };
 
 export type SceneApi = {
-  // 2D Primitives
   addPoint: (config: AddPointConfig) => void;
   addLine: (config: AddLineConfig) => void;
   addPoly2D: (config: AddPoly2DConfig) => void;
   addCircle: (config: AddCircleConfig) => void;
 
-  // 3D Primitives
   addSphere: (config: AddSphereConfig) => void;
   addCylinder: (config: AddCylinderConfig) => void;
   addPoly3D: (config: AddPoly3DConfig) => void;
   addDonut: (config: AddDonutConfig) => void;
 
-  // Infrastructure
   addAxes: (config?: AddAxesConfig) => void;
   addLabel: (config: AddLabelConfig) => void;
   addGroup: (config: AddGroupConfig) => void;
@@ -182,7 +185,6 @@ export type SceneApi = {
   setGrid: (size: number) => void;
   setSmoothness: (segments: number) => void;
 
-  // Registry access
   getObject: (id: string) => THREE.Object3D | undefined;
   listObjects: () => ObjectMeta[];
 };

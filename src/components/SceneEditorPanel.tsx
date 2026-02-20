@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Undo2, Redo2, Copy, Check, Code2, AlertCircle } from "lucide-react";
+import { Undo2, Redo2, Copy, Check, Code2, AlertCircle, AlertTriangle, ChevronLeft, ChevronRight, Crosshair, X } from "lucide-react";
 
 import { SceneCodeEditor } from "@/components/SceneCodeEditor";
 import { Button } from "@/components/ui/button";
@@ -9,9 +9,14 @@ import { cn } from "@/lib/utils";
 import {
   useSceneEditorStore,
   set_validation_error,
+  set_validation_errors,
+  set_warnings,
+  dismiss_warning,
+  next_error,
+  prev_error,
 } from "@/lib/scene/editor_store";
 import { pretty_print_scene_code, format_scene_code, remove_comments } from "@/lib/scene/comments";
-import { validate_scene_code } from "@/lib/chat/scene_apply";
+import { validate_scene_code, type ValidationError as ValidationErrorType } from "@/lib/scene/validation";
 import { SCENE_ROOT_ID } from "@/lib/scene/constants";
 
 type SceneEditorPanelProps = {
@@ -54,12 +59,24 @@ export function SceneEditorPanel({
   validationError: validationErrorProp,
 }: SceneEditorPanelProps) {
   const storeValidationError = useSceneEditorStore((s) => s.validationError);
+  const storeValidationErrors = useSceneEditorStore((s) => s.validationErrors);
+  const storeCurrentErrorIndex = useSceneEditorStore((s) => s.currentErrorIndex);
+  const storeWarnings = useSceneEditorStore((s) => s.warnings);
+  const storeDismissedWarnings = useSceneEditorStore((s) => s.dismissedWarnings);
   const validationError = validationErrorProp ?? storeValidationError;
+  const validationErrors: ValidationErrorType[] = storeValidationErrors;
+  const currentErrorIndex = storeCurrentErrorIndex;
+  const warnings = storeWarnings;
+  const dismissedWarnings = storeDismissedWarnings;
+  const activeWarnings = warnings.filter(w => !dismissedWarnings.has(w));
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const breadcrumbsRef = useRef<HTMLDivElement>(null);
+  const errorPanelRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
+  const [errorPanelScrolled, setErrorPanelScrolled] = useState({ left: false, right: false });
+  const [breadcrumbsScrolled, setBreadcrumbsScrolled] = useState({ left: false, right: false });
 
   const isObjectMode = selectedObjectId !== null && selectedObjectId !== SCENE_ROOT_ID;
 
@@ -143,6 +160,10 @@ export function SceneEditorPanel({
     if (fullSceneCode !== lastSyncedCodeRef.current) {
       lastSyncedCodeRef.current = fullSceneCode;
       
+      // Clear validation errors when scene/object changes
+      set_validation_error(null);
+      set_validation_errors([]);
+      
       // Strip existing comments first to prevent stacking
       const cleanedCode = remove_comments(fullSceneCode);
       
@@ -166,29 +187,69 @@ export function SceneEditorPanel({
     (code: string) => {
       if (!code.trim()) {
         set_validation_error(null);
-        update_scene_code_editor(code);
+        set_validation_errors([]);
+        set_warnings([]);
+        
+        if (isObjectMode && selectedObjectId) {
+          // In object mode with empty code - remove the object from scene
+          const newSceneCode = removeObjectCode(fullSceneCode, selectedObjectId);
+          update_scene_code_storage?.(newSceneCode);
+          onApplySceneCode?.(newSceneCode);
+          // Exit object mode - select scene root
+          window.dispatchEvent(new CustomEvent("stemify:select-object", {
+            detail: { objectId: SCENE_ROOT_ID, startObjectId: SCENE_ROOT_ID, breadcrumbs: ["scene"] }
+          }));
+        } else {
+          // In scene mode with empty code - clear everything
+          update_scene_code_editor("");
+          update_scene_code_storage?.("");
+          onApplySceneCode?.("");
+        }
         return;
       }
 
-      const result = validate_scene_code(code);
+      let codeToValidate: string;
+      let codeToSave: string;
+
+      if (isObjectMode && selectedObjectId) {
+        const mergedSceneCode = replaceObjectCode(fullSceneCode, selectedObjectId, code);
+        codeToValidate = mergedSceneCode;
+        codeToSave = mergedSceneCode;
+      } else {
+        codeToValidate = code;
+        codeToSave = code;
+      }
+
+      const result = validate_scene_code(codeToValidate);
       if (!result.ok) {
-        set_validation_error(result.error ?? "Invalid scene code");
-        update_scene_code_editor(code);
+        set_validation_error(result.errors.length > 0 ? result.errors[0].message : "Invalid scene code");
+        set_validation_errors(result.errors);
+        // Don't update store with invalid code - this would crash the viewport
+        // Just show errors in the editor
         return;
       }
 
       set_validation_error(null);
+      set_validation_errors([]);
       // Format code after successful validation (no comment injection)
-      const formattedCode = format_scene_code(code);
-      setLocalCode(formattedCode);
+      const formattedCode = format_scene_code(codeToSave);
       
       // Strip comments before saving to prevent stacking
       const cleanCode = remove_comments(formattedCode);
-      update_scene_code_editor(cleanCode);
+      
+      // Store warnings (not cleared, accumulated)
+      set_warnings(result.warnings);
+      
+      // In object mode, don't update fullSceneCode via update_scene_code_editor
+      // to avoid triggering sync effect which would reset localCode.
+      // We still apply to viewport and save to storage.
+      if (!isObjectMode) {
+        update_scene_code_editor(cleanCode);
+      }
       update_scene_code_storage?.(cleanCode);
       onApplySceneCode?.(cleanCode);
     },
-    [update_scene_code_editor, update_scene_code_storage, onApplySceneCode]
+    [update_scene_code_editor, update_scene_code_storage, onApplySceneCode, fullSceneCode, isObjectMode, selectedObjectId]
   );
 
   const handleCodeChange = useCallback(
@@ -213,6 +274,44 @@ export function SceneEditorPanel({
       }
     };
   }, []);
+
+  const updateErrorPanelScrollState = useCallback(() => {
+    if (!errorPanelRef.current) return;
+    const { scrollLeft, scrollWidth, clientWidth } = errorPanelRef.current;
+    setErrorPanelScrolled({
+      left: scrollLeft > 0,
+      right: scrollLeft < scrollWidth - clientWidth - 1,
+    });
+  }, []);
+
+  useEffect(() => {
+    const panel = errorPanelRef.current;
+    if (!panel) return;
+    
+    panel.addEventListener("scroll", updateErrorPanelScrollState);
+    updateErrorPanelScrollState();
+    
+    return () => panel.removeEventListener("scroll", updateErrorPanelScrollState);
+  }, [updateErrorPanelScrollState]);
+
+  const updateBreadcrumbsScrollState = useCallback(() => {
+    if (!breadcrumbsRef.current) return;
+    const { scrollLeft, scrollWidth, clientWidth } = breadcrumbsRef.current;
+    setBreadcrumbsScrolled({
+      left: scrollLeft > 0,
+      right: scrollLeft < scrollWidth - clientWidth - 1,
+    });
+  }, []);
+
+  useEffect(() => {
+    const container = breadcrumbsRef.current;
+    if (!container) return;
+    
+    container.addEventListener("scroll", updateBreadcrumbsScrollState);
+    updateBreadcrumbsScrollState();
+    
+    return () => container.removeEventListener("scroll", updateBreadcrumbsScrollState);
+  }, [updateBreadcrumbsScrollState]);
 
   const handleCopy = useCallback(async () => {
     let codeToCopy: string;
@@ -269,46 +368,82 @@ export function SceneEditorPanel({
           </Button>
         </div>
 
-        <div 
-          ref={breadcrumbsRef}
-          className="flex items-center gap-1 text-xs text-white/60 overflow-x-auto scrollbar-hide"
-          style={{ scrollSnapType: 'x mandatory' }}
-        >
-          {breadcrumbs.map((id, index) => (
-              <span 
-                key={id} 
-                className="flex items-center gap-1 shrink-0"
-                style={{ scrollSnapAlign: 'center' }}
-              >
-                {index > 0 && <span className="text-white/30">›</span>}
-                <button
-                  data-id={id}
-                  className={cn(
-                    "hover:text-white shrink-0 px-1",
-                    ((id === selectedObjectId) || (index === 0 && selectedObjectId === SCENE_ROOT_ID)) && "text-amber-400"
-                  )}
-                  onClick={() => {
-                    // "scene" (index 0) - select scene to show full scene code
-                    if (index === 0) {
-                      onBreadcrumbClick(id, index);
-                    } else if (id === selectedObjectId) {
-                      onOpen?.();
-                    } else {
-                      onBreadcrumbClick(id, index);
-                    }
-                  }}
+        <div className="relative flex-1 min-w-0">
+          <div 
+            ref={breadcrumbsRef}
+            className="flex items-center gap-1 text-xs text-white/60 overflow-x-auto scrollbar-hide"
+            style={{ scrollSnapType: 'x mandatory' }}
+          >
+            {breadcrumbs.map((id, index) => (
+                <span 
+                  key={id} 
+                  className="flex items-center gap-1 shrink-0"
+                  style={{ scrollSnapAlign: 'center' }}
                 >
-                  {id}
-                </button>
-              </span>
+                  {index > 0 && <span className="text-white/30">›</span>}
+                  <button
+                    data-id={id}
+                    className={cn(
+                      "hover:text-white shrink-0 px-1",
+                      ((id === selectedObjectId) || (index === 0 && selectedObjectId === SCENE_ROOT_ID)) && "text-amber-400"
+                    )}
+                    onClick={() => {
+                      // "scene" (index 0) - select scene to show full scene code
+                      if (index === 0) {
+                        onBreadcrumbClick(id, index);
+                      } else if (id === selectedObjectId) {
+                        onOpen?.();
+                      } else {
+                        onBreadcrumbClick(id, index);
+                      }
+                    }}
+                  >
+                    {id}
+                  </button>
+                </span>
             ))}
+          </div>
         </div>
 
-        <div className="flex-1" />
-
         {validationError && (
-          <div className="flex items-center gap-1 text-xs text-red-400">
+          <button
+            className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 transition-colors"
+            onClick={() => {
+              if (!isOpen) {
+                onOpen?.();
+              }
+            }}
+            title="View error"
+          >
             <AlertCircle className="h-3 w-3" />
+          </button>
+        )}
+
+        {/* Warning indicator - show when there are warnings but no errors */}
+        {!validationError && activeWarnings.length > 0 && (
+          <div className="flex items-center gap-1">
+            {activeWarnings.map((warning, index) => (
+              <div key={index} className="flex items-center gap-1 text-xs text-yellow-400">
+                <button
+                  className="flex items-center gap-1 hover:text-yellow-300 transition-colors"
+                  onClick={() => {
+                    if (!isOpen) {
+                      onOpen?.();
+                    }
+                  }}
+                  title={warning}
+                >
+                  <AlertTriangle className="h-3 w-3" />
+                </button>
+                <button
+                  className="p-0.5 hover:bg-white/10 rounded transition-colors"
+                  onClick={() => dismiss_warning(warning)}
+                  title="Dismiss warning"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
           </div>
         )}
 
@@ -329,6 +464,72 @@ export function SceneEditorPanel({
           </Button>
         )}
       </div>
+
+      {/* Error panel */}
+      {validationErrors.length > 0 && (
+        <div className="flex items-center gap-2 px-4 py-1 border-b border-white/5 shrink-0 bg-black/20">
+          {/* Prev/Next - hide if only 1 error */}
+          {validationErrors.length > 1 && (
+            <div className="flex items-center -mx-1">
+              <Button
+                variant="toolbar"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => prev_error()}
+                title="Previous error"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="toolbar"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => next_error()}
+                title="Next error"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+
+          {/* Error counter */}
+          <span className="text-xs text-white/50 shrink-0">
+            {currentErrorIndex + 1}/{validationErrors.length}
+          </span>
+
+          {/* Error text - scrollable */}
+          <div className="flex-1 relative min-w-0">
+            <div
+              ref={errorPanelRef}
+              className="flex items-center overflow-x-auto scrollbar-hide text-xs text-red-400 whitespace-nowrap"
+              style={{ scrollSnapType: 'x mandatory' }}
+            >
+              <span style={{ scrollSnapAlign: 'center' }}>
+                {validationErrors[currentErrorIndex]?.message}
+              </span>
+            </div>
+            {/* Left fade */}
+            {errorPanelScrolled.left && (
+              <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-[var(--main-black)] to-transparent pointer-events-none" />
+            )}
+            {/* Right fade */}
+            {errorPanelScrolled.right && (
+              <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[var(--main-black)] to-transparent pointer-events-none" />
+            )}
+          </div>
+
+          {/* Go to - does nothing for now (placeholder) */}
+          <Button
+            variant="toolbar"
+            size="icon"
+            className="h-7 w-7 shrink-0"
+            title="Go to error (placeholder)"
+            onClick={() => { /* TODO: implement go to error line */ }}
+          >
+            <Crosshair className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
 
       {/* Editor area */}
       <div 
@@ -482,4 +683,46 @@ function extractMethodName(code: string): string {
   return match ? match[1] : "";
 }
 
+function replaceObjectCode(sceneCode: string, objectId: string, newObjectCode: string): string {
+  const oldObjectCode = extractObjectCode(sceneCode, objectId);
+  if (!oldObjectCode) return sceneCode;
+  
+  // Find the position of the old object code in the scene
+  const startIndex = sceneCode.indexOf(oldObjectCode);
+  if (startIndex === -1) return sceneCode;
+  
+  const endIndex = startIndex + oldObjectCode.length;
+  
+  // Replace with new object code, preserving surrounding whitespace
+  const before = sceneCode.slice(0, startIndex);
+  const after = sceneCode.slice(endIndex);
+  
+  return before + newObjectCode + after;
+}
 
+function removeObjectCode(sceneCode: string, objectId: string): string {
+  const objectCode = extractObjectCode(sceneCode, objectId);
+  if (!objectCode) return sceneCode;
+  
+  const startIndex = sceneCode.indexOf(objectCode);
+  if (startIndex === -1) return sceneCode;
+  
+  const endIndex = startIndex + objectCode.length;
+  
+  // Remove the object and clean up surrounding whitespace/newlines
+  let before = sceneCode.slice(0, startIndex);
+  let after = sceneCode.slice(endIndex);
+  
+  // Remove trailing whitespace/newlines before the removed object
+  before = before.replace(/\s+$/, "");
+  
+  // Remove leading whitespace/newlines after the removed object
+  after = after.replace(/^\s+/, "");
+  
+  // Ensure there's a newline between remaining objects if needed
+  if (before.length > 0 && after.length > 0) {
+    return before + "\n" + after;
+  }
+  
+  return before + after;
+}

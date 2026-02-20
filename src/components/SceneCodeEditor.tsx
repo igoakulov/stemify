@@ -29,6 +29,8 @@ export function SceneCodeEditor({
   const monacoRef = useRef<Monaco | null>(null);
   const overflowRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
+  const prevValueRef = useRef(value);
+  const isFocusedRef = useRef(false);
 
   const handle_mount: OnMount = useCallback(
     (editor, monaco) => {
@@ -105,10 +107,16 @@ export function SceneCodeEditor({
 
       // Wire up focus/blur handlers
       if (onFocus) {
-        editor.onDidFocusEditorWidget(onFocus);
+        editor.onDidFocusEditorWidget(() => {
+          isFocusedRef.current = true;
+          onFocus();
+        });
       }
       if (onBlur) {
-        editor.onDidBlurEditorWidget(onBlur);
+        editor.onDidBlurEditorWidget(() => {
+          isFocusedRef.current = false;
+          onBlur();
+        });
       }
 
       // Defocus editor on Escape key
@@ -197,8 +205,35 @@ export function SceneCodeEditor({
 
     editorRef.current.updateOptions({
       overflowWidgetsDomNode: overflowRef.current,
-    });
+    } as Parameters<typeof editorRef.current.updateOptions>[0]);
   }, [mounted]);
+
+  useEffect(() => {
+    if (!mounted || !editorRef.current) return;
+    if (value === prevValueRef.current) return;
+
+    const editor = editorRef.current;
+    
+    // Only restore view state if editor is focused (user is actively editing)
+    // This preserves cursor/scroll when external code is applied
+    if (isFocusedRef.current) {
+      const viewState = editor.saveViewState();
+      
+      // Use setTimeout to ensure Monaco has processed the value change first
+      const timeoutId = setTimeout(() => {
+        if (viewState && editorRef.current) {
+          editorRef.current.restoreViewState(viewState);
+        }
+      }, 0);
+      
+      prevValueRef.current = value;
+      
+      return () => clearTimeout(timeoutId);
+    } else {
+      // Not focused - just update the ref, don't need to restore
+      prevValueRef.current = value;
+    }
+  }, [value, mounted]);
 
   return (
     <div className="h-full w-full bg-[var(--main-black)]">

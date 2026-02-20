@@ -7,6 +7,22 @@ import {
   create_style_materials,
   type StyleMaterials,
 } from "@/lib/three/styleguide";
+import { create_axes_group } from "@/lib/scene/axes";
+
+export const DEFAULT_AXES_ID = "__default_axes__";
+
+const DEFAULT_AXES_CONFIG = {
+  x: [0, 5] as [number, number],
+  y: [0, 5] as [number, number],
+  z: [0, 5] as [number, number],
+  length: 5,
+};
+
+export function create_default_axes(): THREE.Group {
+  const axes = create_axes_group(DEFAULT_AXES_CONFIG);
+  axes.name = DEFAULT_AXES_ID;
+  return axes;
+}
 
 export type ThreeBaseTemplate = {
   renderer: THREE.WebGLRenderer;
@@ -78,6 +94,8 @@ export function create_three_base_template(
   const fill = new THREE.DirectionalLight(0xffffff, 0.25);
   fill.position.set(-6, 4, -8);
   scene.add(fill);
+
+  scene.add(create_default_axes());
 
   const reset_camera = () => {
     camera.position.copy(default_camera_position);

@@ -1,88 +1,144 @@
 type CommentDictionary = Record<string, Record<string, string>>;
 
 const COMMENTS: CommentDictionary = {
+  addPoint: {
+    center: "// Position: [x, y, z]. Omit for origin [0, 0, 0]",
+    shift: "// Offset from center: [dx, dy, dz] for temporary adjustments",
+    color: "// Hex color: #RRGGBB or rgba(255,0,0,1) or hsl(0,100%,50%)",
+    selectable: "// true=can click to inspect, false=cannot",
+  },
   addLine: {
-    points: "// Smooth line through any number of points",
-    arrow: '// "none" / "end" / "both" for arrows',
-    direction: "// Face {x:0, y:0, z:1} direction relative to self",
-    rotation: "// Spin clockwise: degrees. 180=flipped",
+    points: "// Array of [x,y,z] points: [[0,0,0], [1,1,1]] or formula expression",
+    shift: "// Offset all points: [dx, dy, dz]",
+    thickness: "// Line width. 0=thin line, >0=tube",
+    arrow: '// Arrow heads: "none" / "start" / "end" / "both"',
+    color: "// Hex color or rgba() or hsl()",
+    opacity: "// 1=opaque, 0=transparent, 0.5=semi-transparent",
   },
   addPoly2D: {
-    points: "// Corners. 3=triangle, 4=rectangle, 5+=polygon",
-    direction: "// Face {x:0, y:0, z:1} direction relative to self",
-    rotation: "// Spin clockwise: degrees. 180=flipped",
-    opacity: "// 1=solid fill, 0=outline, 0.5=semi-transparent",
+    points: "// Corners as [[x,y,z], [x,y,z], ...]. 3=triangle, 4=rectangle, 5+=polygon",
+    shift: "// Offset all points: [dx, dy, dz]",
+    color: "// Hex color or rgba() or hsl()",
+    opacity: "// 1=solid fill, 0=outline only, 0.5=semi-transparent",
+    direction: "// Face direction: [0, 0, 1] = facing +Z axis",
+    rotation: "// Spin around direction axis: degrees. 180=flipped",
   },
   addCircle: {
-    direction: "// Face {x:0, y:0, z:1} direction relatively to self",
-    slice:
-      "// Cut: number (180=half, 90=quarter), or {start,end} for specific arc",
-    stretch: "// Make oval: {x:2, y:1}=stretched 2x horizontally",
+    center: "// Position: [x, y, z]. Omit for origin",
+    shift: "// Offset from center: [dx, dy, dz]",
+    radius: "// Circle size",
+    stretch: "// Make oval: [2, 1, 1]=stretched 2x in X",
+    anglecut: "// Cut arc: [0, 180]=half, [0, 90]=quarter, [0, 360]=full. 0° = +X",
+    direction: "// Face direction: [0, 1, 0] = facing up (+Y)",
+    rotation: "// Spin around direction: degrees",
+    color: "// Hex color or rgba() or hsl()",
+    opacity: "// 1=solid, 0=outline, 0.5=transparent",
   },
   addSphere: {
-    slice: "// Cut: number (180=half), or {start,end} for specific arc",
-    stretch: "// Make oval: {x:2, y:1, z:1}=stretched 2x horizontally",
-    direction: "// Face {x:0, y:0, z:1} direction relative to self",
-    rotation: "// Spin clockwise: degrees. 180=flipped",
+    center: "// Position: [x, y, z]. Omit for origin",
+    shift: "// Offset from center: [dx, dy, dz]",
+    radius: "// Sphere size",
+    stretch: "// Make oval: [2, 1, 1]=stretched 2x in X",
+    anglecut: "// Horizontal cut: [0, 180]=half, [0, 90]=quarter. 0° = +X",
+    flatcut: "// Vertical cut: [0, 180]=half sphere, [0, 90]=quarter. 0° = top",
+    direction: "// Face direction: [0, 0, 1] = facing +Z",
+    rotation: "// Spin around direction: degrees",
+    color: "// Hex color or rgba() or hsl()",
+    opacity: "// 1=opaque, 0=transparent, 0.5=semi-transparent",
   },
   addCylinder: {
-    points: "// Ends of sections. >2 points=multi-section.",
-    radius: "// Width at each point. 2,2=cylinder, 2,0=cone, 2,0.2,2=hourglass",
-    direction: "// Face {x:0, y:0, z:1} direction relative to self",
-    rotation: "// Spin clockwise: degrees. 180=flipped",
+    points: "// End points: [[x,y,z], [x,y,z]]. 2=straight, 3+=curved",
+    shift: "// Offset all points: [dx, dy, dz]",
+    radius: "// Width at each point: [2, 2]=cylinder, [2, 0]=cone",
+    anglecut: "// Cut cross-section: [0, 360]=full, [0, 180]=half. 0° = +X",
+    direction: "// Face direction: [0, 0, 1] = facing +Z",
+    rotation: "// Spin around direction: degrees",
+    color: "// Hex color or rgba() or hsl()",
+    opacity: "// 1=opaque, 0=transparent, 0.5=semi-transparent",
   },
   addPoly3D: {
-    direction: "// Face {x:0, y:0, z:1} direction relative to self",
-    rotation: "// Spin clockwise: degrees. 180=flipped",
-    points: "// Corners. Order matters: connect in order, then back to start",
+    points: "// Corners: [[x,y,z], ...]. Order matters - connects in order",
+    shift: "// Offset all points: [dx, dy, dz]",
+    color: "// Hex color or rgba() or hsl()",
+    opacity: "// 1=solid, 0=wireframe, 0.5=transparent",
+    direction: "// Face direction: [0, 0, 1] = facing +Z",
+    rotation: "// Spin around direction: degrees",
   },
   addDonut: {
-    slice: "// 180=cut arc from start. {90,270}=cut specific section.",
+    center: "// Position: [x, y, z]. Omit for origin",
+    shift: "// Offset from center: [dx, dy, dz]",
+    radius: "// Donut ring radius (center to tube center)",
+    thickness: "// Tube thickness",
+    anglecut: "// Cut arc: [0, 360]=full ring, [0, 180]=half ring. 0° = +X",
+    direction: "// Face direction: [0, 0, 1] = flat on XY plane",
+    rotation: "// Spin around direction: degrees",
+    color: "// Hex color or rgba() or hsl()",
+    opacity: "// 1=opaque, 0=transparent, 0.5=semi-transparent",
   },
   addAxes: {
-    length: "// How far each axis extends from origin in both directions",
-    position: "// Origin point, recommended at {x:0, y:0, z:0}",
+    x: "// X-axis range: [start, end]. Omit axis to hide it",
+    y: "// Y-axis range: [start, end]. Omit axis to hide it", 
+    z: "// Z-axis range: [start, end]. Omit axis to hide it",
+    length: "// Length if not specifying ranges",
+    position: "// Origin point: [x, y, z]. Default [0, 0, 0]",
+    selectable: "// true=can click, false=cannot",
   },
   addLabel: {
-    text: "// Text. Use $...$ for math expressions: $x^2$ = x squared",
-    fontSizePx: "// Text size: 12-24",
+    text: "// Text to display. Use $...$ for math: $x^2$ = x squared",
+    position: "// Position: [x, y, z]",
+    color: "// Text color: hex, rgba(), or hsl()",
+    fontSizePx: "// Text size in pixels: 12-24",
+    selectable: "// true=can click to inspect, false=cannot",
   },
   addGroup: {
-    children: "// IDs of objects inside group, will move/rotate as one",
-    direction: "// Face {x:0, y:0, z:1} direction relative to self",
-    rotation: "// Spin clockwise: degrees. 180=flipped",
+    children: "// IDs of objects to group: ['obj1', 'obj2']",
+    shift: "// Move entire group: [dx, dy, dz]",
+    direction: "// Turn to face: [0, 0, 1] = facing +Z",
+    rotation: "// Spin around direction: degrees",
+    selectable: "// true=can click to inspect group, false=cannot",
   },
   addTooltip: {
     title: "// Title shown when selecting object",
     properties:
-      '// "This is a wheel", or structured info: { label: "Mass", value: "5kg" }',
+      '// Structured info: [{ label: "Mass", value: "5kg" }, { label: "Speed", value: "10m/s" }]',
   },
   addAnimation: {
     updateFunction:
-      '// Edit duration/movement or write your own code. Runs every frame (~60 times/sec). Use "elapsed" for time.',
+      '// JavaScript code running every frame (~60/sec). Use "elapsed" for seconds. Example: obj.rotation.y = elapsed;',
   },
   addCustomMesh: {
-    createFn: "// Custom Three.js code for advanced shapes",
-    direction: "// Face {x:0, y:0, z:1} direction relative to self",
-    rotation: "// Spin clockwise: degrees. 180=flipped",
+    createFn: "// Custom Three.js code. Return a THREE.Mesh",
+    center: "// Position: [x, y, z]. Omit for origin",
+    shift: "// Offset from center: [dx, dy, dz]",
+    color: "// Mesh color if material supports it",
+    direction: "// Face direction: [0, 0, 1] = facing +Z",
+    rotation: "// Spin around direction: degrees",
+    selectable: "// true=can click to inspect, false=cannot",
   },
 };
 
 const GLOBAL_COMMENTS: Record<string, string> = {
-  id: '// Name: "wheel", "pendulum"',
-  opacity: "// 1=solid, 0=transparent. 0.5=semi-transparent",
-  direction: "// Face {x:0, y:0, z:1} direction relative to self",
-  rotation: "// Spin clockwise: degrees. 180=flipped",
+  id: '// Unique name: "wheel", "pendulum", "house_roof"',
+  opacity: "// 1=opaque, 0=transparent, 0.5=semi-transparent",
+  shift: "// Offset: [dx, dy, dz]. Stacks with center/points",
+  direction: "// Face direction: [0, 0, 1] = facing +Z axis",
+  rotation: "// Spin degrees around direction axis. 180=flipped",
   selectable: "// true=can click to inspect/edit code, false=cannot",
 };
 
-const SCENE_INTRO = `// Welcome to your Stemify scene code
+const SCENE_INTRO = `// Welcome to your STEMify scene code
 
-// 1. Click on object in scene
-// 2. Edit its size, shape, color...
-// 3. Scene will update on the fly!
-
-// Stay under 50 objects / 100k polygons
+// Coordinate format: [x, y, z] - always array of 3 numbers
+// Example: center: [1, 2, 3], points: [[0,0,0], [1,1,1]]
+// 
+// Quick reference:
+// - [0, 0, 0] = origin
+// - Omit parameter = use default (usually origin or no effect)
+// - shift: [dx, dy, dz] = adds to position temporarily
+// - direction: [0, 0, 1] = facing positive Z direction
+// - rotation: degrees around direction axis
+//
+// Stay under 50 objects / 100k polygons for performance
 `;
 
 export function inject_comments(code: string, method?: string): string {

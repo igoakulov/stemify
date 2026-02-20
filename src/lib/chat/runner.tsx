@@ -9,8 +9,7 @@ import { upsert_scene, type SavedScene } from "@/lib/scene/store";
 
 import type { ChatMessage, ChatThreadId } from "@/lib/chat/types";
 import { get_scene_code, parse_model_output } from "@/lib/chat/parse";
-import { validate_scene_code } from "@/lib/chat/scene_apply";
-import { validate_llm_response } from "@/lib/scene/validation";
+import { validate_scene_code, validate_llm_response } from "@/lib/scene/validation";
 import {
   show_error,
   show_warning,
@@ -164,8 +163,10 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
 
   // Stage 1: Validate LLM response structure and content
   const llm_validation = validate_llm_response(parsed.payload);
-  if (!llm_validation.valid) {
-    const error_msg = llm_validation.error ?? "Unknown validation error";
+  if (!llm_validation.ok) {
+    const error_msg = llm_validation.errors.length > 0 
+      ? llm_validation.errors.map(e => e.message).join("; ")
+      : "Unknown validation error";
     prepare_error_context({
       thread_id: options.thread_id,
       user_message: options.user_text,
@@ -185,7 +186,9 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
   // Stage 2: Validate scene code can execute
   const validation = validate_scene_code(scene_code);
   if (!validation.ok) {
-    const error_msg = validation.error ?? "Unknown scene error";
+    const error_msg = validation.errors.length > 0 
+      ? validation.errors.map(e => e.message).join("; ")
+      : "Unknown scene error";
     prepare_error_context({
       thread_id: options.thread_id,
       user_message: options.user_text,

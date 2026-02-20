@@ -13,8 +13,10 @@ import { get_thread } from "@/lib/chat/store";
 import { show_error, show_warning, BANNERS, prepare_error_context } from "@/lib/chat/banner";
 import {
   resize_renderer_to_canvas,
+  DEFAULT_AXES_ID,
+  create_default_axes,
 } from "@/lib/three/base_template";
-import { get_start_object_id, useSceneEditorStore } from "@/lib/scene/editor_store";
+import { get_start_object_id, useSceneEditorStore, set_validation_error, set_validation_errors, set_warnings } from "@/lib/scene/editor_store";
 import { SCENE_ROOT_ID } from "@/lib/scene/constants";
 
 export type SceneViewportProps = {
@@ -481,19 +483,10 @@ export function SceneViewport(props: SceneViewportProps) {
     grid.material = runtime.materials.grid_line;
     runtime.scene.add(grid);
 
-    // Clear previous scene content
-    while (runtime.root.children.length > 0) {
-      runtime.root.remove(runtime.root.children[0]);
-    }
-
     // Initialize grid state
     const grid_state = create_default_grid_state();
     grid_state.enabled = props.gridSnap ?? true;
     grid_state_ref.current = grid_state;
-
-    const registry = new ObjectRegistry();
-    registry_ref.current = registry;
-    const scene_api = create_scene_api({ template: runtime, registry, gridConfig: grid_state });
 
     // Start render loop unconditionally - grid/template should always be visible
     const loop = () => {
@@ -505,8 +498,9 @@ export function SceneViewport(props: SceneViewportProps) {
     };
     raf_ref.current = window.requestAnimationFrame(loop);
 
-    // Execute scene code function
-    const execute_scene = (code: string) => {
+    // Validate scene code before clearing anything
+    // This prevents clearing the scene when validation fails
+    const validate_scene_code_internal = (code: string): ReturnType<typeof validate_scene> => {
       const scene_obj = {
         id: props.sceneId,
         sceneCode: code,
@@ -514,47 +508,94 @@ export function SceneViewport(props: SceneViewportProps) {
         createdAt: 0,
         updatedAt: 0,
       };
-      const validation = validate_scene(scene_obj);
-      if (!validation.ok) {
-        const error_msg = validation.error ?? "Invalid scene code";
-        prepare_error_context({
-          thread_id: props.sceneId,
-          user_message: "",
-          error_message: error_msg,
-          invalid_json: code,
-          scene: scene_obj,
-          mode: "build",
-        });
-        const config = BANNERS.INVALID_SCENE_CODE;
-        show_error(config.message, {
-          title: config.title,
-          actions: config.actions,
-        });
-      } else {
-        if (validation.warnings && validation.warnings.length > 0) {
-          const config = BANNERS.PERFORMANCE_WARNING(validation.warnings.join(", "));
-          show_warning(config.message, { title: config.title });
-        }
-        execute_scene_code(code, scene_api);
+      return validate_scene(scene_obj);
+    };
 
-        // After execution, recalculate breadcrumbs from startObjectId
-        const startId = get_start_object_id();
-        if (startId && registry_ref.current?.get_mesh(startId)) {
-          const newBreadcrumbs = registry_ref.current.find_path_to_root(startId);
-          window.dispatchEvent(new CustomEvent("stemify:select-object", { 
-            detail: { 
-              objectId: selected_id_ref.current,
-              startObjectId: startId,
-              breadcrumbs: newBreadcrumbs
-            } 
-          }));
-        } else if (startId && !registry_ref.current?.get_mesh(startId)) {
-          // startObjectId deleted - clear everything
-          window.dispatchEvent(new CustomEvent("stemify:select-object", { 
-            detail: { objectId: null, startObjectId: null, breadcrumbs: [] } 
-          }));
-        }
+    // Execute scene code function - assumes validation already passed
+    // Creates fresh registry and scene_api, clears scene, then executes
+    const execute_validated_scene = (code: string, validation: ReturnType<typeof validate_scene>) => {
+      // Clear errors in editor store
+      set_validation_error(null);
+      set_validation_errors([]);
+      
+      if (validation.warnings && validation.warnings.length > 0) {
+        set_warnings(validation.warnings);
+        const config = BANNERS.PERFORMANCE_WARNING(validation.warnings.join(", "));
+        show_warning(config.message, { title: config.title });
+      } else {
+        set_warnings([]);
       }
+
+      // Clear previous scene content before executing new code
+      while (runtime.root.children.length > 0) {
+        runtime.root.remove(runtime.root.children[0]);
+      }
+
+      // Restore default axes if removed by previous addAxes call
+      if (!runtime.scene.getObjectByName(DEFAULT_AXES_ID)) {
+        runtime.scene.add(create_default_axes());
+      }
+
+      // Create fresh registry and scene_api for this execution
+      const registry = new ObjectRegistry();
+      registry_ref.current = registry;
+      const scene_api = create_scene_api({ template: runtime, registry, gridConfig: grid_state });
+
+      const exec_error = execute_scene_code(code, scene_api);
+      if (exec_error) {
+        set_validation_error(exec_error.message);
+        set_validation_errors([{ type: "runtime", message: exec_error.message }]);
+        return;
+      }
+
+      // After execution, recalculate breadcrumbs from startObjectId
+      const startId = get_start_object_id();
+      if (startId && registry_ref.current?.get_mesh(startId)) {
+        const newBreadcrumbs = registry_ref.current.find_path_to_root(startId);
+        window.dispatchEvent(new CustomEvent("stemify:select-object", { 
+          detail: { 
+            objectId: selected_id_ref.current,
+            startObjectId: startId,
+            breadcrumbs: newBreadcrumbs
+          }
+        }));
+      } else if (startId && !registry_ref.current?.get_mesh(startId)) {
+        // startObjectId deleted - clear everything
+        window.dispatchEvent(new CustomEvent("stemify:select-object", { 
+          detail: { objectId: null, startObjectId: null, breadcrumbs: [] } 
+        }));
+      }
+    };
+
+    // Handle validation failure - show errors but don't clear scene
+    const handle_validation_failure = (code: string, validation: ReturnType<typeof validate_scene>) => {
+      const error_msg = validation.errors.length > 0 
+        ? validation.errors.map(e => e.message).join("; ")
+        : "Invalid scene code";
+      
+      // Update editor store so errors show in editor panel
+      set_validation_error(error_msg);
+      set_validation_errors(validation.errors);
+      
+      prepare_error_context({
+        thread_id: props.sceneId,
+        user_message: "",
+        error_message: error_msg,
+        invalid_json: code,
+        scene: {
+          id: props.sceneId,
+          sceneCode: code,
+          title: "",
+          createdAt: 0,
+          updatedAt: 0,
+        },
+        mode: "build",
+      });
+      const config = BANNERS.INVALID_SCENE_CODE;
+      show_error(config.message, {
+        title: config.title,
+        actions: config.actions,
+      });
     };
 
     // Attempt to execute scene code (in order of priority):
@@ -638,7 +679,12 @@ export function SceneViewport(props: SceneViewportProps) {
 
     // Execute scene code if available
     if (code_to_execute && code_to_execute.trim().length > 0) {
-      execute_scene(code_to_execute);
+      const validation = validate_scene_code_internal(code_to_execute);
+      if (validation.ok) {
+        execute_validated_scene(code_to_execute, validation);
+      } else {
+        handle_validation_failure(code_to_execute, validation);
+      }
     }
 
     // Initialize breadcrumbs after scene setup (handles initial load)
@@ -703,19 +749,8 @@ export function SceneViewport(props: SceneViewportProps) {
       props.onGridChange?.(new_enabled);
       
       // Re-execute scene code with new grid settings
+      // Validate FIRST before clearing anything
       if (props.sceneCode && props.sceneCode.trim().length > 0 && runtime_ref.current) {
-        const registry = new ObjectRegistry();
-        const scene_api = create_scene_api({ 
-          template: runtime_ref.current, 
-          registry, 
-          gridConfig: grid_state_ref.current 
-        });
-        
-        // Clear previous scene content
-        while (runtime_ref.current.root.children.length > 0) {
-          runtime_ref.current.root.remove(runtime_ref.current.root.children[0]);
-        }
-        
         const scene_obj = {
           id: props.sceneId,
           sceneCode: props.sceneCode,
@@ -724,9 +759,30 @@ export function SceneViewport(props: SceneViewportProps) {
           updatedAt: 0,
         };
         const validation = validate_scene(scene_obj);
+        
         if (validation.ok) {
+          // Only clear and execute if validation passes
+          const registry = new ObjectRegistry();
+          registry_ref.current = registry;
+          const scene_api = create_scene_api({ 
+            template: runtime_ref.current, 
+            registry, 
+            gridConfig: grid_state_ref.current 
+          });
+          
+          // Clear previous scene content
+          while (runtime_ref.current.root.children.length > 0) {
+            runtime_ref.current.root.remove(runtime_ref.current.root.children[0]);
+          }
+
+          // Restore default axes if removed by previous addAxes call
+          if (!runtime_ref.current.scene.getObjectByName(DEFAULT_AXES_ID)) {
+            runtime_ref.current.scene.add(create_default_axes());
+          }
+          
           execute_scene_code(props.sceneCode, scene_api);
         }
+        // If validation fails, keep existing scene - don't clear
       }
     }
   }, [props.gridSnap, props.sceneCode, props.onGridChange]);

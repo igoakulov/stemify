@@ -126,15 +126,190 @@ export function format_scene_code(code: string): string {
   return formattedLines.join("\n");
 }
 
-const DOCS_MARKER = "// === HOW TO STEMIFY ===";
+const DOCS_MARKER = `// ===========================
+//        HOW TO STEMIFY
+// ===========================`;
 
 const STEMIFY_INTRO = `// 1. ASK assistant about a subject
 // 2. Tell him to BUILD an interactive scene
 // 3. Click on objects in the scene
 // 4. Change their position, size, color...
-// 5. Try adding more using help below`;
+// 5. Customize using DOCS below`;
 
-const STEMIFY_DOCS = `// Full documentation coming soon`;
+const STEMIFY_DOCS = `// ===========================
+//         USING DOCS
+// ===========================
+
+// 1. Add shapes with scene.addX() methods
+// 2. Add settings with scene.setX() methods
+// 3. Copy, paste above "HOW TO STEMIFY",
+// 4. Uncomment (remove starting "//")
+// 5. Change parameters + add optional
+
+// ===========================
+//           SHAPES
+// ===========================
+
+// Optional parameters shared by most shapes:
+//   color: "#E6E8EB", // "red", HEX, RGB
+//   opacity: 1, // number
+//   direction: [0,0,1], // xyz
+//   rotation: 0, // number (degrees)
+//   shift: [0,0,0], // xyz, offset from position
+//   selectable: true, // true/false
+// ---------------------------
+//   EXCEPTIONS:
+// * opacity: NOT addPoint, addCustomMesh
+// * direction, rotation: NOT addPoint
+// ---------------------------
+//   HINTS:
+// * direction: from origin, shape would face this point
+// * groups: move, turn or annotate shapes as one
+// * clever use: 3+ points, 0 radii, cuts give new shapes
+// ---------------------------
+// scene.addPoint({
+//   id: "point", // required, text
+//   center: [0,0,0], //
+// })
+// ---------------------------
+// scene.addLine({
+//   id: "line", //
+//   points: [[0,0,0],[1,1,1]], // can add 3+
+//   thickness: 0, // optional, number
+//   arrow: "none", // optional, "none"|"start"|"end"|"both"
+// })
+// Example: straight, wavy (3+ points) vector, tube
+//
+// Example for curve (circle) with sin/cos formula:
+// scene.addLine({
+//   points: {
+//     x: "Math.cos(t)", // finds x from t
+//     y: "Math.sin(t)", // finds x from t
+//     z: "0", // constant in this example
+//     tSteps: 50 // takes 50 t values in range
+//     tMin: 0, // lower limit for t
+//     tMax: 6.28, // upper limit for t
+//   },
+// });
+// ---------------------------
+// scene.addPoly2D({
+//   id: "polygon", //
+//   points: [
+//     [0,0,0], // required, [[x,y,z],...]
+//     [1,0,0],
+//     [0,1,0]],
+// }),
+// Example: triangle, rectangle, polygon, flat floor
+// ---------------------------
+// scene.addCircle({
+//   id: "circle", //
+//   center: [0,0,0], // optional, xyz
+//   radius: 1, // required, number
+//   anglecut: [0,360], // optional, number
+//   stretch: [1,1,1], // optional, xyz
+//   opacity: 1, // optional, number, 0=outline only
+// }),
+// Example: disc, ring, pie slice, ellipse
+// ---------------------------
+// scene.addSphere({
+//   id: "sphere", //
+//   center: [0,0,0], // optional, xyz
+//   radius: 1, // required, number
+//   anglecut: [0,360], // optional, number
+//   flatcut: [0,360], // optional, number
+//   stretch: [1,1,1], // optional, xyz
+// }),
+// Example: ball, planet, dome, ellipsoid
+// ---------------------------
+// scene.addCylinder({
+//   id: "cylinder", //
+//   points: [[0,0,0],[0,1,0]], // can add 3+
+//   radius: [1,1], // required, number per point
+//   anglecut: [0,360], // optional, number
+// }),
+// Example: pipe, cone (one radius=0), multi-section e.g. hourglass (3+ points)
+// ---------------------------
+// scene.addPoly3D({
+//   id: "poly3d", //
+//   points: [
+//     [0,0,0],
+//     [1,0,0],
+//     [0,1,0]],
+// }), // required, [[x,y,z],...]
+// Example: cube, pyramid, prism, crystal
+// ---------------------------
+// scene.addDonut({
+//   id: "donut", //
+//   center: [0,0,0], // optional, xyz
+//   radius: 1, // required, number
+//   thickness: 0.5, // required, number
+//   anglecut: [0,360], // optional, number
+// }),
+// Example: ring, tire, orbit, rainbow
+// ---------------------------
+// scene.addCustomMesh({
+//   id: "mesh", //
+//   createFn: "new THREE.Mesh(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({color: 0xE6E8EB}))",
+// }),
+// Example: complex shapes (human, robot), use three.js
+
+// ===========================
+//         INFORMATION
+// ===========================
+
+// scene.addLabel({
+//   id: "label", // required, string
+//   text: "Label", // required, string
+//   position: [0,0,0], // required, xyz
+//   color: "#E6E8EB", // optional, string
+//   fontSizePx: 16, // optional, number
+//   selectable: true, // optional, true/false
+// }),
+// ---------------------------
+// scene.addTooltip({
+//   id: "another_object_id", // required
+//   title: "Specification", // required, string
+//   properties: [
+//     {label: "Mass", value: "2kg"},
+//     {label: "Velocity", value: "5m/s"}
+//   ],  // can also be just ["text"]
+// }),
+
+// ===========================
+//         COMPOSITION
+// ===========================
+
+// scene.addGroup({
+//   id: "house", // required, string
+//   children: ["roof", "wall"],
+//   direction: [0,0,1], // optional, xyz
+//   rotation: 0, // optional, number
+//   selectable: true,
+// }),
+// Example: combinations (pendulum, house, spacecraft - shift/direction/rotation apply to entire group)
+// ---------------------------
+// scene.addAnimation({
+//   id: "animation", // required, string
+//   updateFunction: "scene.getObject('object').rotation.y = elapsed;", // required, string, use 'elapsed' time
+// }),
+
+// ===========================
+//           SCENE
+// ===========================
+
+// scene.addAxes({
+//   id: "axes", // optional, string
+//   x: [-5,5], // optional, [start,end]
+//   y: [-5,5], // optional, [start,end]
+//   z: [-5,5], // optional, [start,end]
+//   length: 5, // optional, number
+//   position: [0,0,0], // optional, xyz
+//   selectable: false, //
+// }),
+// ---------------------------
+// scene.setGrid(0.5) // round values, snap to grid
+// ---------------------------
+// scene.setSmoothness(64) // round object smoothness, 64 (fastest) | 128 (balanced) | 256 (smoothest)`;
 
 export function append_docs(code: string): string {
   const trimmed = code.trimEnd();

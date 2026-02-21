@@ -1,9 +1,8 @@
 import * as THREE from "three";
 
 const MOVE_SPEED = 5;
-const SPRINT_MULTIPLIER = 2;
-const SPRINT_DELAY_MS = 500;
-const DOUBLE_TAP_THRESHOLD_MS = 300;
+const LOOK_SPEED = 0.002;
+const ROLL_SPEED = 1.5;
 
 export type FlyControlsConfig = {
   camera: THREE.PerspectiveCamera;
@@ -22,13 +21,16 @@ export type FlyControls = {
   getPosition: () => THREE.Vector3;
   setPosition: (pos: THREE.Vector3) => void;
   getTarget: () => THREE.Vector3;
+  getKeyState: () => { forward: boolean; backward: boolean; left: boolean; right: boolean; up: boolean; down: boolean };
+  setSpeed: (speed: number) => void;
 };
 
 export function create_fly_controls(config: FlyControlsConfig): FlyControls {
-  const { camera, domElement, moveSpeed = MOVE_SPEED, lookSpeed = 0.002 } = config;
+  const { camera, domElement, moveSpeed: initialSpeed = MOVE_SPEED, lookSpeed = LOOK_SPEED } = config;
 
   let enabled = false;
   let isActive = false;
+  let moveSpeed = initialSpeed;
 
   const keys = {
     forward: false,
@@ -37,185 +39,169 @@ export function create_fly_controls(config: FlyControlsConfig): FlyControls {
     right: false,
     up: false,
     down: false,
+    rollLeft: false,
+    rollRight: false,
   };
-
-  let sprintActive = false;
-  let lastTapTime = 0;
-  let lastTapKey: string | null = null;
-  let sprintTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   let yaw = 0;
   let pitch = 0;
+  let consecutiveWheelEvents = 0;
+  let lastWheelDirection = { x: 0, y: 0 };
 
-  let isDragging = false;
-  let lastMouseX = 0;
-  let lastMouseY = 0;
+  const dispatchKeyState = () => {
+    window.dispatchEvent(
+      new CustomEvent("stemify:fly-controls-key-state", {
+        detail: { ...keys },
+      })
+    );
+  };
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (!enabled) return;
 
-    const key = e.key.toLowerCase();
+    // Skip if typing in input
+    const target = e.target as HTMLElement;
+    if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
 
-    switch (key) {
-      case "w":
-        if (!keys.forward) handleSprint("forward");
+    switch (e.code) {
+      case "KeyW":
+      case "ArrowUp":
         keys.forward = true;
         break;
-      case "s":
-        if (!keys.backward) handleSprint("backward");
+      case "KeyS":
+      case "ArrowDown":
         keys.backward = true;
         break;
-      case "a":
-        if (!keys.left) handleSprint("left");
+      case "KeyA":
+      case "ArrowLeft":
         keys.left = true;
         break;
-      case "d":
-        if (!keys.right) handleSprint("right");
+      case "KeyD":
+      case "ArrowRight":
         keys.right = true;
         break;
-      case " ":
-        if (!keys.up) handleSprint("up");
+      case "Space":
         keys.up = true;
         e.preventDefault();
         break;
-      case "shift":
-        if (!keys.down) handleSprint("down");
+      case "ShiftLeft":
+      case "ShiftRight":
         keys.down = true;
         break;
+      case "KeyQ":
+        keys.rollLeft = true;
+        break;
+      case "KeyE":
+        keys.rollRight = true;
+        break;
     }
+
+    dispatchKeyState();
   };
 
   const handleKeyUp = (e: KeyboardEvent) => {
     if (!enabled) return;
 
-    const key = e.key.toLowerCase();
-
-    switch (key) {
-      case "w":
+    switch (e.code) {
+      case "KeyW":
+      case "ArrowUp":
         keys.forward = false;
         break;
-      case "s":
+      case "KeyS":
+      case "ArrowDown":
         keys.backward = false;
         break;
-      case "a":
+      case "KeyA":
+      case "ArrowLeft":
         keys.left = false;
         break;
-      case "d":
+      case "KeyD":
+      case "ArrowRight":
         keys.right = false;
         break;
-      case " ":
+      case "Space":
         keys.up = false;
         break;
-      case "shift":
+      case "ShiftLeft":
+      case "ShiftRight":
         keys.down = false;
         break;
-    }
-  };
-
-  const handleSprint = (key: string) => {
-    const now = Date.now();
-
-    if (lastTapKey === key && now - lastTapTime < DOUBLE_TAP_THRESHOLD_MS) {
-      sprintActive = true;
-
-      if (sprintTimeoutId) {
-        clearTimeout(sprintTimeoutId);
-      }
-
-      sprintTimeoutId = setTimeout(() => {
-        sprintActive = false;
-        sprintTimeoutId = null;
-      }, SPRINT_DELAY_MS);
+      case "KeyQ":
+        keys.rollLeft = false;
+        break;
+      case "KeyE":
+        keys.rollRight = false;
+        break;
     }
 
-    lastTapTime = now;
-    lastTapKey = key;
+    dispatchKeyState();
   };
 
-  const handleMouseDown = (e: MouseEvent) => {
+  const handleWheel = (e: WheelEvent) => {
     if (!enabled) return;
 
-    if (e.button === 1) {
-      isDragging = true;
-      lastMouseX = e.clientX;
-      lastMouseY = e.clientY;
-      e.preventDefault();
+    // Ignore very small deltas (trackpad jitter on initial touch)
+    if (Math.abs(e.deltaX) <= 1 && Math.abs(e.deltaY) <= 1) return;
+
+    // Require 2 consecutive wheel events with consistent direction before applying rotation
+    const currentDirection = { 
+      x: Math.sign(e.deltaX), 
+      y: Math.sign(e.deltaY) 
+    };
+    
+    const hasConsistentDirection = (
+      (currentDirection.x !== 0 && currentDirection.x === lastWheelDirection.x) ||
+      (currentDirection.y !== 0 && currentDirection.y === lastWheelDirection.y)
+    );
+    
+    if (hasConsistentDirection) {
+      consecutiveWheelEvents++;
+    } else {
+      consecutiveWheelEvents = 1;
     }
-  };
+    
+    lastWheelDirection = currentDirection;
 
-  const handleMouseUp = (e: MouseEvent) => {
-    if (e.button === 1) {
-      isDragging = false;
+    // Skip rotation until we've seen 2 consistent events
+    if (consecutiveWheelEvents < 2) {
+      return;
     }
-  };
 
-  const handleMouseMove = (e: MouseEvent) => {
-    if (!enabled || !isDragging) return;
+    // Clamp delta to prevent huge jumps from trackpad
+    const clampedDeltaX = Math.max(-100, Math.min(100, e.deltaX));
+    const clampedDeltaY = Math.max(-100, Math.min(100, e.deltaY));
 
-    const deltaX = e.clientX - lastMouseX;
-    const deltaY = e.clientY - lastMouseY;
-
-    yaw -= deltaX * lookSpeed;
-    pitch -= deltaY * lookSpeed;
+    // Inverted look: swipe left → look left, swipe down → look down
+    yaw += clampedDeltaX * lookSpeed;
+    pitch += clampedDeltaY * lookSpeed;
 
     pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, pitch));
 
     camera.rotation.order = "YXZ";
     camera.rotation.y = yaw;
     camera.rotation.x = pitch;
+    // Preserve roll
+    camera.rotation.z = 0;
 
-    lastMouseX = e.clientX;
-    lastMouseY = e.clientY;
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleWheel = (_e: WheelEvent) => {
-    if (!enabled) return;
-  };
-
-  const handleContextMenu = (e: MouseEvent) => {
-    if (isDragging) {
-      e.preventDefault();
-    }
-  };
-
-  const updateSprintTimeout = () => {
-    if (sprintActive) {
-      const anyMovementKey =
-        keys.forward ||
-        keys.backward ||
-        keys.left ||
-        keys.right ||
-        keys.up ||
-        keys.down;
-
-      if (!anyMovementKey) {
-        if (sprintTimeoutId) {
-          clearTimeout(sprintTimeoutId);
-        }
-        sprintTimeoutId = setTimeout(() => {
-          sprintActive = false;
-          sprintTimeoutId = null;
-        }, SPRINT_DELAY_MS);
-      }
-    }
+    isActive = true;
   };
 
   const update = (delta: number) => {
     if (!enabled) return;
 
-    isActive =
-      keys.forward ||
-      keys.backward ||
-      keys.left ||
-      keys.right ||
-      keys.up ||
-      keys.down ||
-      isDragging;
+    isActive = keys.forward || keys.backward || keys.left || keys.right || keys.up || keys.down || keys.rollLeft || keys.rollRight;
 
-    updateSprintTimeout();
+    // delta is in milliseconds, convert to seconds
+    const deltaSeconds = delta / 1000;
+    const speed = moveSpeed * deltaSeconds;
 
-    const speed = moveSpeed * (sprintActive ? SPRINT_MULTIPLIER : 1) * delta;
+    // Apply roll
+    if (keys.rollLeft) {
+      camera.rotation.z += ROLL_SPEED * deltaSeconds;
+    }
+    if (keys.rollRight) {
+      camera.rotation.z -= ROLL_SPEED * deltaSeconds;
+    }
 
     const direction = new THREE.Vector3();
 
@@ -239,17 +225,9 @@ export function create_fly_controls(config: FlyControlsConfig): FlyControls {
   };
 
   const dispose = () => {
-    domElement.removeEventListener("keydown", handleKeyDown);
-    domElement.removeEventListener("keyup", handleKeyUp);
-    domElement.removeEventListener("mousedown", handleMouseDown);
-    domElement.removeEventListener("mouseup", handleMouseUp);
-    domElement.removeEventListener("mousemove", handleMouseMove);
+    window.removeEventListener("keydown", handleKeyDown);
+    window.removeEventListener("keyup", handleKeyUp);
     domElement.removeEventListener("wheel", handleWheel);
-    domElement.removeEventListener("contextmenu", handleContextMenu);
-
-    if (sprintTimeoutId) {
-      clearTimeout(sprintTimeoutId);
-    }
   };
 
   const setEnabled = (value: boolean) => {
@@ -258,16 +236,20 @@ export function create_fly_controls(config: FlyControlsConfig): FlyControls {
     if (enabled) {
       yaw = camera.rotation.y;
       pitch = camera.rotation.x;
+      consecutiveWheelEvents = 0;
+      lastWheelDirection = { x: 0, y: 0 };
     } else {
-      isDragging = false;
       keys.forward = false;
       keys.backward = false;
       keys.left = false;
       keys.right = false;
       keys.up = false;
       keys.down = false;
-      sprintActive = false;
+      keys.rollLeft = false;
+      keys.rollRight = false;
     }
+
+    dispatchKeyState();
   };
 
   const reset = (position: THREE.Vector3, target: THREE.Vector3) => {
@@ -285,13 +267,15 @@ export function create_fly_controls(config: FlyControlsConfig): FlyControls {
     return camera.position.clone().add(direction);
   };
 
-  domElement.addEventListener("keydown", handleKeyDown);
-  domElement.addEventListener("keyup", handleKeyUp);
-  domElement.addEventListener("mousedown", handleMouseDown);
-  domElement.addEventListener("mouseup", handleMouseUp);
-  domElement.addEventListener("mousemove", handleMouseMove);
+  const getKeyState = () => ({ ...keys });
+
+  const setSpeed = (speed: number) => {
+    moveSpeed = speed;
+  };
+
+  window.addEventListener("keydown", handleKeyDown);
+  window.addEventListener("keyup", handleKeyUp);
   domElement.addEventListener("wheel", handleWheel, { passive: false });
-  domElement.addEventListener("contextmenu", handleContextMenu);
 
   return {
     get enabled() {
@@ -307,5 +291,7 @@ export function create_fly_controls(config: FlyControlsConfig): FlyControls {
     getPosition,
     setPosition,
     getTarget,
+    getKeyState,
+    setSpeed,
   };
 }

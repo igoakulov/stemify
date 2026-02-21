@@ -5,10 +5,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { SceneHistoryDialog } from "@/components/SceneHistoryDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { SceneViewport } from "@/components/SceneViewport";
-import { SceneToolbar } from "@/components/SceneToolbar";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { SceneEditorPanel } from "@/components/SceneEditorPanel";
 import { clear_banner } from "@/lib/chat/banner";
+import { load_camera_mode, save_camera_mode, type CameraMode } from "@/lib/scene/camera_mode";
 import {
   load_saved_scenes,
   save_saved_scenes,
@@ -27,11 +27,21 @@ import { SCENE_ROOT_ID } from "@/lib/scene/constants";
 export function AppShell() {
   const [active_scene, set_active_scene] = useState<SavedScene | null>(null);
   const [grid_snap, set_grid_snap] = useState(true);
+  const [camera_mode, set_camera_mode] = useState<CameraMode>("rotate");
   const [showSceneEditor, setShowSceneEditor] = useState(false);
   const [sceneCode, setSceneCode] = useState("");
   const active_scene_id_ref = useRef<string | null>(null);
   const manualToggleRef = useRef(false);
   const prevSceneRef = useRef<SavedScene | null>(null);
+
+  // Load camera mode from localStorage after mount (avoid hydration mismatch)
+  useEffect(() => {
+    const raf = window.requestAnimationFrame(() => {
+      const saved = load_camera_mode();
+      set_camera_mode(saved);
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, []);
   
   const selectedObjectId = useSceneEditorStore((s) => s.selectedObjectId);
   const breadcrumbs = useSceneEditorStore((s) => s.breadcrumbs);
@@ -254,13 +264,16 @@ export function AppShell() {
                     sceneCode={active_scene?.sceneCode ?? ""} 
                     sceneId={active_scene?.id ?? ""}
                     gridSnap={grid_snap}
-                  />
-                  <SceneToolbar
+                    cameraMode={camera_mode}
+                    onCameraModeChange={(mode) => {
+                      save_camera_mode(mode);
+                      set_camera_mode(mode);
+                      window.dispatchEvent(new CustomEvent("stemify:camera-mode-change", { detail: { mode } }));
+                    }}
                     onResetCamera={() => window.dispatchEvent(new Event("stemify:camera-reset"))}
                     onGoHome={() => {
                       window.dispatchEvent(new Event("stemify:confirm-new-scene"));
                     }}
-                    gridSnap={grid_snap}
                     onGridChange={(enabled) => {
                       set_grid_snap(enabled);
                       if (active_scene?.id) {

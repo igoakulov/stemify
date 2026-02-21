@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import * as THREE from "three";
 
 import { create_three_base_template, type ThreeBaseTemplate } from "@/lib/three/base_template";
+import { create_fly_controls, type FlyControls } from "@/lib/three/fly_controls";
 import { create_scene_api, create_default_grid_state, type GridState } from "@/lib/scene/scene_api";
 import { ObjectRegistry, type HoverData } from "@/lib/scene/object_registry";
 import { execute_scene_code } from "@/lib/scene/execute_scene_code";
@@ -11,6 +12,9 @@ import { validate_scene } from "@/lib/scene/validation";
 import { parse_model_output, get_scene_code } from "@/lib/chat/parse";
 import { get_thread } from "@/lib/chat/store";
 import { show_error, show_warning, BANNERS, prepare_error_context } from "@/lib/chat/banner";
+import { KeyboardShortcut } from "@/components/ui/keyboard-shortcut";
+import { Eye, Rocket, Hand, Grid2X2Check, Turtle, PersonStanding, Bike, Plane, Car, Crosshair } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   resize_renderer_to_canvas,
   DEFAULT_AXES_ID,
@@ -18,12 +22,19 @@ import {
 } from "@/lib/three/base_template";
 import { get_start_object_id, useSceneEditorStore, set_validation_error, set_validation_errors, set_warnings } from "@/lib/scene/editor_store";
 import { SCENE_ROOT_ID } from "@/lib/scene/constants";
+import { type CameraMode } from "@/lib/scene/camera_mode";
 
 export type SceneViewportProps = {
   sceneCode: string;
   sceneId: string;
   gridSnap?: boolean;
   onGridChange?: (enabled: boolean) => void;
+  cameraMode?: CameraMode;
+  onCameraModeChange?: (mode: CameraMode) => void;
+  onResetCamera?: () => void;
+  onGoHome?: () => void;
+  onDrillUp?: () => void;
+  onDrillDown?: () => void;
 };
 
 const HOVER_COLOR = 0xfbbf24;
@@ -48,8 +59,33 @@ export function SceneViewport(props: SceneViewportProps) {
   const mouse_ref = useRef<THREE.Vector2>(new THREE.Vector2());
   const mouse_down_pos_ref = useRef<{ x: number; y: number } | null>(null);
   const mouse_down_time_ref = useRef<number>(0);
+  const fly_controls_ref = useRef<FlyControls | null>(null);
   const [tooltip, setTooltip] = useState<HoverData | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isFlyMode, setIsFlyMode] = useState(false);
+  const flySpeedOptions = [1, 5, 10, 25, 50, 100];
+  const [flySpeedIndex, setFlySpeedIndex] = useState(1); // default to 5x
+  const getSpeedIcon = (speed: number) => {
+    switch (speed) {
+      case 1: return <Turtle className="w-3 h-3" />;
+      case 5: return <PersonStanding className="w-3 h-3" />;
+      case 10: return <Bike className="w-3 h-3" />;
+      case 25: return <Car className="w-3 h-3" />;
+      case 50: return <Plane className="w-3 h-3" />;
+      case 100: return <Rocket className="w-3 h-3" />;
+      default: return <Rocket className="w-3 h-3" />;
+    }
+  };
+  const [flyKeys, setFlyKeys] = useState({
+    forward: false,
+    backward: false,
+    left: false,
+    right: false,
+    up: false,
+    down: false,
+    rollLeft: false,
+    rollRight: false,
+  });
 
   // Refs to store latest highlight functions for use in event listeners
   const applyHoverHighlightRef = useRef<(objectId: string | null) => void>(() => {});
@@ -103,6 +139,65 @@ export function SceneViewport(props: SceneViewportProps) {
     window.addEventListener("stemify:select-object", handleExternalSelect);
     return () => window.removeEventListener("stemify:select-object", handleExternalSelect);
   }, []);
+
+  // Handle camera mode changes from toolbar
+  useEffect(() => {
+    const handleCameraModeChange = (event: Event) => {
+      const custom = event as CustomEvent<{ mode: CameraMode }>;
+      const newMode = custom.detail.mode;
+      const isFly = newMode === "fly";
+      setIsFlyMode(isFly);
+
+      if (fly_controls_ref.current) {
+        fly_controls_ref.current.setEnabled(isFly);
+      }
+
+      if (runtime_ref.current) {
+        runtime_ref.current.controls.enabled = !isFly;
+        
+        // When switching from fly to rotate, reset orbit controls target to origin
+        if (!isFly) {
+          runtime_ref.current.controls.target.set(0, 0, 0);
+          runtime_ref.current.controls.update();
+        }
+      }
+    };
+
+    window.addEventListener("stemify:camera-mode-change", handleCameraModeChange);
+    return () => window.removeEventListener("stemify:camera-mode-change", handleCameraModeChange);
+  }, []);
+
+  // Sync with cameraMode prop (handles initial load from localStorage)
+  useEffect(() => {
+    const isFly = props.cameraMode === "fly";
+    setIsFlyMode(isFly);
+
+    if (fly_controls_ref.current) {
+      fly_controls_ref.current.setEnabled(isFly);
+    }
+
+    if (runtime_ref.current) {
+      runtime_ref.current.controls.enabled = !isFly;
+    }
+  }, [props.cameraMode]);
+
+  // Listen for fly mode key state updates
+  useEffect(() => {
+    const handleFlyKeyState = (event: Event) => {
+      const custom = event as CustomEvent<typeof flyKeys>;
+      setFlyKeys(custom.detail);
+    };
+
+    window.addEventListener("stemify:fly-controls-key-state", handleFlyKeyState);
+    return () => window.removeEventListener("stemify:fly-controls-key-state", handleFlyKeyState);
+  }, []);
+
+  // Update fly controls speed when changed
+  useEffect(() => {
+    if (fly_controls_ref.current) {
+      fly_controls_ref.current.setSpeed(flySpeedOptions[flySpeedIndex]);
+    }
+  }, [flySpeedIndex]);
 
   const getPickedId = useCallback((event: MouseEvent): string | null => {
     const canvas = canvas_ref.current;
@@ -465,6 +560,21 @@ export function SceneViewport(props: SceneViewportProps) {
     const runtime = create_three_base_template(canvas, label_container);
     runtime_ref.current = runtime;
 
+    // Create fly controls
+    const fly_controls = create_fly_controls({
+      camera: runtime.camera,
+      domElement: canvas,
+      moveSpeed: 5,
+    });
+    fly_controls_ref.current = fly_controls;
+
+    // Initialize controls based on camera mode
+    const initialMode = props.cameraMode ?? "rotate";
+    if (initialMode === "fly") {
+      fly_controls.setEnabled(true);
+      runtime.controls.enabled = false;
+    }
+
     const on_reset = () => {
       runtime.reset_camera();
     };
@@ -482,15 +592,39 @@ export function SceneViewport(props: SceneViewportProps) {
     grid_state_ref.current = grid_state;
 
     // Start render loop unconditionally - grid/template should always be visible
-    const loop = () => {
+    let lastTime = performance.now();
+    const loop = (time: number) => {
+      let delta = time - lastTime;
+      lastTime = time;
+
+      // Clamp delta to avoid huge jumps (e.g., after tab was inactive)
+      delta = Math.min(delta, 100);
+
       resize_renderer_to_canvas(runtime);
-      runtime.controls.update();
+
+      // Only update orbit controls when NOT in fly mode
+      if (!fly_controls.enabled) {
+        runtime.controls.update();
+      }
+
+      // Update fly controls when in fly mode
+      if (fly_controls.enabled) {
+        fly_controls.update(delta);
+      }
+
+      // Skip render if camera position is invalid
+      if (!Number.isFinite(runtime.camera.position.x)) {
+        runtime.camera.position.set(6, 4, 8);
+      }
+
       runtime.renderer.render(runtime.scene, runtime.camera);
       runtime.label_renderer.render(runtime.scene, runtime.camera);
       
       // Continuously save camera position (survives HMR/component remounts)
       saved_camera_position_ref.current = runtime.camera.position.clone();
-      saved_camera_target_ref.current = runtime.controls.target.clone();
+      saved_camera_target_ref.current = fly_controls.enabled
+        ? fly_controls.getTarget()
+        : runtime.controls.target.clone();
       
       raf_ref.current = window.requestAnimationFrame(loop);
     };
@@ -724,9 +858,12 @@ export function SceneViewport(props: SceneViewportProps) {
       }
 
       runtime.dispose();
+      fly_controls.dispose();
       runtime_ref.current = null;
+      fly_controls_ref.current = null;
       registry_ref.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.sceneCode, props.sceneId, props.gridSnap, handleClick, handleMouseMove, handleMouseLeave, handleMouseDown, handleDrillUp, handleDrillDown, handleLabelClick, clearHighlight]);
 
   // Handle grid snap toggle
@@ -740,53 +877,8 @@ export function SceneViewport(props: SceneViewportProps) {
     if (grid_state_ref.current.enabled !== new_enabled) {
       grid_state_ref.current.enabled = new_enabled;
       props.onGridChange?.(new_enabled);
-      
-      // Re-execute scene code with new grid settings
-      // Validate FIRST before clearing anything
-      if (props.sceneCode && props.sceneCode.trim().length > 0 && runtime_ref.current) {
-        const scene_obj = {
-          id: props.sceneId,
-          sceneCode: props.sceneCode,
-          title: "",
-          createdAt: 0,
-          updatedAt: 0,
-        };
-        const validation = validate_scene(scene_obj);
-        
-        if (validation.ok) {
-          // Only clear and execute if validation passes
-          const registry = new ObjectRegistry();
-          registry_ref.current = registry;
-          const scene_api = create_scene_api({ 
-            template: runtime_ref.current, 
-            registry, 
-            gridConfig: grid_state_ref.current 
-          });
-          
-          // Clear previous scene content
-          while (runtime_ref.current.root.children.length > 0) {
-            runtime_ref.current.root.remove(runtime_ref.current.root.children[0]);
-          }
-
-          // Restore default axes if removed by previous addAxes call
-          if (!runtime_ref.current.scene.getObjectByName(DEFAULT_AXES_ID)) {
-            runtime_ref.current.scene.add(create_default_axes());
-          }
-          
-          execute_scene_code(props.sceneCode, scene_api);
-          
-          // Restore camera position after scene execution (camera was saved continuously in render loop)
-          if (saved_camera_position_ref.current && saved_camera_target_ref.current) {
-            runtime_ref.current.camera.position.copy(saved_camera_position_ref.current);
-            runtime_ref.current.controls.target.copy(saved_camera_target_ref.current);
-            runtime_ref.current.controls.update();
-          }
-        }
-        // If validation fails, keep existing scene - don't clear
-      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.sceneCode, props.sceneId, props.gridSnap, props.onGridChange]);
+  }, [props.gridSnap, props.onGridChange]);
 
   return (
     <div
@@ -794,6 +886,155 @@ export function SceneViewport(props: SceneViewportProps) {
       className="relative h-full w-full overflow-hidden rounded-r-2xl bg-gradient-to-b from-zinc-900 to-[var(--main-black)]"
     >
       <canvas ref={canvas_ref} className="h-full w-full" />
+
+      {/* Vertical Toolbar */}
+      <div className="absolute left-2 top-2 z-10">
+        <div className="flex flex-col items-start gap-3 rounded-outer p-2">
+          {/* Logo */}
+          <button
+            type="button"
+            onClick={props.onGoHome}
+            className="text-sm font-semibold text-white/80 tracking-tight px-1 select-none hover:text-white transition-colors cursor-pointer"
+          >
+            Stemify
+          </button>
+
+          {/* Divider - logo width */}
+          <div className="w-16 h-px bg-white/10" />
+
+          {/* Grid Toggle - same width as mode toggle */}
+          <button
+            type="button"
+            onClick={() => props.onGridChange?.(!(props.gridSnap ?? true))}
+            className={cn(
+              "flex items-center gap-1.5 px-2 py-0.5 rounded transition-all duration-150 w-[68px]",
+              "border text-[10px]",
+              props.gridSnap ?? true
+                ? "bg-amber-500/20 border-amber-500/30 text-amber-400 hover:bg-amber-500/30"
+                : "bg-white/5 border-white/5 text-white/50 hover:bg-white/10 hover:text-white/80"
+            )}
+          >
+            <Grid2X2Check className="w-3 h-3" />
+            <span>snap</span>
+          </button>
+
+          {/* Reset */}
+          <div className="flex items-center gap-0.5">
+            <KeyboardShortcut
+              keys={["R"]}
+              onTrigger={props.onResetCamera ?? (() => {})}
+              shortcutId="scene-reset"
+              className="border border-white/5 bg-white/5"
+            />
+            <span className="text-[10px] text-white/50 ml-1">reset</span>
+          </div>
+
+          {/* Drill Up/Down */}
+          <div className="flex items-center gap-0.5">
+            <KeyboardShortcut
+              keys={["["]}
+              onTrigger={props.onDrillUp ?? (() => {})}
+              shortcutId="drill-up"
+              className="border border-white/5 bg-white/5"
+            />
+            <KeyboardShortcut
+              keys={["]"]}
+              onTrigger={props.onDrillDown ?? (() => {})}
+              shortcutId="drill-down"
+              className="border border-white/5 bg-white/5"
+            />
+            <span className="text-[10px] text-white/50 ml-1">drill</span>
+          </div>
+
+          {/* Mode Toggle */}
+          <button
+            type="button"
+            onClick={() => props.onCameraModeChange?.(isFlyMode ? "rotate" : "fly")}
+            className={cn(
+              "flex items-center gap-1.5 px-2 py-0.5 rounded transition-all duration-150 w-[68px]",
+              "border text-[10px]",
+              isFlyMode
+                ? "bg-amber-500/20 border-amber-500/30 text-amber-400 hover:bg-amber-500/30"
+                : "bg-white/5 border-white/5 text-white/50 hover:bg-white/10 hover:text-white/80"
+            )}
+          >
+            {isFlyMode ? (
+              <Rocket className="w-3 h-3" />
+            ) : (
+              <Hand className="w-3 h-3" />
+            )}
+            <span>{isFlyMode ? "fly" : "rotate"}</span>
+          </button>
+
+          {/* Fly Mode Controls */}
+          {isFlyMode && (
+            <>
+              {/* Divider - mode toggle width */}
+              <div className="w-[68px] h-px bg-white/10" />
+
+              {/* Move - W centered above AS D */}
+              <div className="flex flex-col items-start gap-0.5">
+                <div className="flex items-center gap-0.5">
+                  <span className="w-[22px]" />
+                  <KeyboardShortcut keys={["W"]} onTrigger={() => {}} forceActive={flyKeys.forward} className="border border-white/5 bg-white/5" />
+                </div>
+                <div className="flex items-center gap-0.5">
+                  <KeyboardShortcut keys={["A"]} onTrigger={() => {}} forceActive={flyKeys.left} className="border border-white/5 bg-white/5" />
+                  <KeyboardShortcut keys={["S"]} onTrigger={() => {}} forceActive={flyKeys.backward} className="border border-white/5 bg-white/5" />
+                  <KeyboardShortcut keys={["D"]} onTrigger={() => {}} forceActive={flyKeys.right} className="border border-white/5 bg-white/5" />
+                  <span className="text-[10px] text-white/50 ml-1">move</span>
+                </div>
+              </div>
+
+              {/* Up/Down */}
+              <div className="flex items-center gap-0.5">
+                <KeyboardShortcut keys={["Shift"]} onTrigger={() => {}} forceActive={flyKeys.down} className="border border-white/5 bg-white/5" />
+                <KeyboardShortcut keys={["Space"]} onTrigger={() => {}} forceActive={flyKeys.up} className="border border-white/5 bg-white/5" />
+                <span className="text-[10px] text-white/50 ml-1">up/down</span>
+              </div>
+
+              {/* Roll */}
+              <div className="flex items-center gap-0.5">
+                <KeyboardShortcut keys={["Q"]} onTrigger={() => {}} forceActive={flyKeys.rollLeft} className="border border-white/5 bg-white/5" />
+                <KeyboardShortcut keys={["E"]} onTrigger={() => {}} forceActive={flyKeys.rollRight} className="border border-white/5 bg-white/5" />
+                <span className="text-[10px] text-white/50 ml-1">roll</span>
+              </div>
+
+              {/* Speed */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  min="0"
+                  max={flySpeedOptions.length - 1}
+                  step="1"
+                  value={flySpeedIndex}
+                  onChange={(e) => setFlySpeedIndex(Number(e.target.value))}
+                  className="w-16 h-1 bg-white/20 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2 [&::-webkit-slider-thumb]:h-2 [&::-webkit-slider-thumb]:bg-white/80 [&::-webkit-slider-thumb]:rounded-full"
+                />
+                <div className="flex items-center gap-1 text-white/50">
+                  {getSpeedIcon(flySpeedOptions[flySpeedIndex])}
+                  <span className="text-[10px]">{flySpeedOptions[flySpeedIndex]}x</span>
+                </div>
+              </div>
+
+              {/* Look (scroll) */}
+              <div className="flex items-center gap-2 text-white/50">
+                <Eye className="w-3 h-3" />
+                <span className="text-[10px]">scroll</span>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Crosshair (fly mode only) */}
+      {isFlyMode && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <Crosshair className="w-4 h-4 text-white/40" />
+        </div>
+      )}
+
+      {/* Tooltip */}
       {tooltip && (
         <div 
           className={`absolute top-2 right-2 rounded-lg bg-zinc-900/90 border px-3 py-2 text-sm shadow-lg cursor-pointer hover:border-amber-400/50 ${selectedId?.startsWith('tooltip:') ? 'border-amber-400' : 'border-white/10'}`}

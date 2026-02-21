@@ -8,15 +8,16 @@ Call `scene.addX()` methods to create 3D visualizations. All coordinates use arr
 
 ### Common Parameters
 
-All primitives share:
+All shapes share:
 - `id`: required, use short self-evident names for shapes / objects
-- `selectable`: default true, allows user to play with objects manually (explore and edit parameters), set false if plays no meaningful role in scene
+- `selectable`: default true, allows user to play with objects manually, set false if plays no meaningful role in scene
 - `color`: default #E6E8EB
-- `opacity`: default 1.0, affects fill (outline remains opaque)
-- `direction`: orientation vector (unit vector), default [0,0,1] = perpendicular to XY plane. [0,1,0] = perpendicular to XZ plane. circle/donut/poly2d/sphere: surface normal / hemisphere opening direction. cylinder: applies rotation to entire shape AFTER building along points - redundant/confusing, use points to define axis instead.
-- `rotation`: default 0, degrees, along facing direction
+- `opacity`: default 1.0 (fill only, outline remains opaque). Not available: addPoint, addCustomMesh
+- `direction`: orientation vector (unit vector), default [0,0,1] = perpendicular to XY plane. Not available: addPoint
+- `rotation`: default 0, degrees, along facing direction. Not available: addPoint
+- `shift`: offset from center/position
 
-Exception: addPoint only supports id, center, color, selectable.
+Note: id is also required on addLabel, addTooltip, addAnimation; optional on addAxes. selectabl also on addLabel, addGroup, addAxes. color/direction/rotation/shift also on addGroup, addCustomMesh.
 Can omit optional parameter entirely when using its default value.
 Examples below do not showcase these shared parameters, unless they implement a notable shape.
 
@@ -142,7 +143,7 @@ scene.addSphere({
     center: [0, 0, 0],
     radius: 3,
     anglecut: [0, 360],
-    flatcut: [0, 180],
+    flatcut: [0, 360],
     direction: [1, 0, 0],
     rotation: 90,
 })

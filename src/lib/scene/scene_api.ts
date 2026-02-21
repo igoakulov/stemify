@@ -452,10 +452,10 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     const phi_length = norm_anglecut ? ((norm_anglecut.end - norm_anglecut.start) * Math.PI) / 180 : Math.PI * 2;
     const is_anglecut = phi_length < Math.PI * 2;
 
-    // flatcut: vertical sweep (latitude/pole to pole), 0 to π = full
+    // flatcut: vertical sweep (latitude), 0-360 degrees maps to 0-π Three.js radians
     const norm_flatcut = normalize_slice(flatcut);
     const theta_start = norm_flatcut ? (norm_flatcut.start * Math.PI) / 180 : 0;
-    const theta_length = norm_flatcut ? ((norm_flatcut.end - norm_flatcut.start) * Math.PI) / 180 : Math.PI;
+    const theta_length = norm_flatcut ? ((norm_flatcut.end - norm_flatcut.start) * Math.PI) / 360 : Math.PI;
     const is_flatcut = theta_length < Math.PI;
 
     const geometry = new THREE.SphereGeometry(radius, smoothness, Math.max(8, smoothness / 2), phi_start, phi_length, theta_start, theta_length);

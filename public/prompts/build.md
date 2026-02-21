@@ -23,7 +23,7 @@ You are now in BUILD mode. You MUST create/update the scene based on message fro
 Example format (copy exact structure):
 ```json
 {
-  "scene": "scene.addSphere({\n  id: \"sphere\",\n  center: { x: -3, y: 1, z: 0 },\n  radius: 1\n});\nscene.addCircle({\n  id: \"disc\",\n  center: { x: 3, y: 1, z: 0 },\n  radius: 1\n});",
+  "scene": "scene.addSphere({\n  id: \"sphere\",\n  center: [-3, 1, 0],\n  radius: 1\n});\nscene.addCircle({\n  id: \"disc\",\n  center: [3, 1, 0],\n  radius: 1\n});",
   "camera": "{\n  \"position\": [6, 4, 8],\n  \"target\": [0, 0, 0]\n}"
 }
 ```

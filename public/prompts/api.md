@@ -1,6 +1,6 @@
 # Scene API Reference
 
-Call `scene.addX()` methods to create 3D visualizations. All coordinates use `{ x, y, z }` objects, never arrays.
+Call `scene.addX()` methods to create 3D visualizations. All coordinates use arrays `[x, y, z]`, never objects.
 
 ---
 
@@ -13,7 +13,7 @@ All primitives share:
 - `selectable`: default true, allows user to play with objects manually (explore and edit parameters), set false if plays no meaningful role in scene
 - `color`: default #E6E8EB
 - `opacity`: default 1.0, affects fill (outline remains opaque)
-- `direction`: orientation vector (unit vector), default {x:0,y:0,z:1} = perpendicular to XY plane. {x:0,y:1,z:0} = perpendicular to XZ plane. circle/donut/poly2d/sphere: surface normal / hemisphere opening direction. cylinder: applies rotation to entire shape AFTER building along points - redundant/confusing, use points to define axis instead.
+- `direction`: orientation vector (unit vector), default [0,0,1] = perpendicular to XY plane. [0,1,0] = perpendicular to XZ plane. circle/donut/poly2d/sphere: surface normal / hemisphere opening direction. cylinder: applies rotation to entire shape AFTER building along points - redundant/confusing, use points to define axis instead.
 - `rotation`: default 0, degrees, along facing direction
 
 Exception: addPoint only supports id, center, color, selectable.
@@ -28,7 +28,7 @@ Creates a marker point (small sphere).
 ```javascript
 scene.addPoint({
     id: "origin",
-    center: { x: 0, y: 0, z: 0 },
+    center: [0, 0, 0],
 })
 ```
 
@@ -41,7 +41,7 @@ Creates lines, tubes, or curves. Supports points array OR formula expression.
 // Vector (line with arrow)
 scene.addLine({
     id: "vector",
-    points: [{ x: 0, y: 0, z: 0 }, { x: 2, y: 1, z: 0 }],
+    points: [[0, 0, 0], [2, 1, 0]],
     thickness: 0,  // 0=line, >0=tube
     arrow: "end",  // "none"|"start"|"end"|"both"
 })
@@ -49,7 +49,7 @@ scene.addLine({
 // Tube (thick line)
 scene.addLine({
     id: "pipe",
-    points: [{ x: 0, y: 0, z: 0 }, { x: 5, y: 3, z: 0 }],  // more points make a curve
+    points: [[0, 0, 0], [5, 3, 0]],  // more points make a curve
     thickness: 0.5,
 })
 
@@ -71,7 +71,7 @@ Creates 2D polygons from vertices.
 ```javascript
 scene.addPoly2D({
     id: "triangle",
-    points: [{ x: 0, y: 0, z: 0 }, { x: 3, y: 0, z: 0 }, { x: 0, y: 4, z: 0 }],
+    points: [[0, 0, 0], [3, 0, 0], [0, 4, 0]],
     opacity: 0.3
 })
 ```
@@ -85,32 +85,32 @@ Creates 2D disc, ring, sector, or ellipse.
 // Disc
 scene.addCircle({
     id: "plate",
-    center: { x: 0, y: 0, z: 0 },
+    center: [0, 0, 0],
     radius: 3,
 })
 
 // Ring (outline only)
 scene.addCircle({
     id: "ring",
-    center: { x: 0, y: 0, z: 0 },
+    center: [0, 0, 0],
     radius: 4,
     opacity: 0,
 })
 
-// Sector (pie slice)
+// Sector
 scene.addCircle({
     id: "sector",
-    center: { x: 0, y: 0, z: 0 },
+    center: [0, 0, 0],
     radius: 3,
-    slice: { start: 0, end: 60 },  // arc degrees
+    anglecut: [0, 60],
 })
 
 // Ellipse
 scene.addCircle({
     id: "ellipse",
-    center: { x: 0, y: 0, z: 0 },
+    center: [0, 0, 0],
     radius: 3,
-    stretch: { x: 1.5, y: 1, z: 1 },
+    stretch: [1.5, 1, 1],
     rotation: 45,
 })
 ```
@@ -124,25 +124,26 @@ Creates 3D sphere, ellipsoid, or hemisphere.
 // Sphere
 scene.addSphere({
     id: "ball",
-    center: { x: 0, y: 2, z: 0 },
+    center: [0, 2, 0],
     radius: 1.5,
 })
 
 // Ellipsoid
 scene.addSphere({
     id: "football",
-    center: { x: 0, y: 0, z: 0 },
+    center: [0, 0, 0],
     radius: 2,
-    stretch: { x: 1, y: 1.5, z: 0.8 },
+    stretch: [1, 1.5, 0.8],
 })
 
 // Hemisphere
 scene.addSphere({
     id: "dome",
-    center: { x: 0, y: 0, z: 0 },
+    center: [0, 0, 0],
     radius: 3,
-    slice: { start: 0, end: 180 },
-    direction: { x: 1, y: 0, z: 0 },
+    anglecut: [0, 360],
+    flatcut: [0, 180],
+    direction: [1, 0, 0],
     rotation: 90,
 })
 ```
@@ -156,31 +157,31 @@ Creates cylinders, cones, or hourglass shapes.
 // Cylinder
 scene.addCylinder({
     id: "column",
-    points: [{ x: 0, y: 0, z: 0 }, { x: 0, y: 5, z: 0 }],
+    points: [[0, 0, 0], [0, 5, 0]],
     radius: [1],
 })
 
 // Cone
 scene.addCylinder({
     id: "spike",
-    points: [{ x: 0, y: 0, z: 0 }, { x: 0, y: 3, z: 0 }],
+    points: [[0, 0, 0], [0, 3, 0]],
     radius: [1.5, 0],
 })
 
 // Hourglass
 scene.addCylinder({
     id: "hourglass",
-    points: [{ x: 0, y: 0, z: 0 }, { x: 0, y: 2, z: 0 }, { x: 0, y: 4, z: 0 }],
+    points: [[0, 0, 0], [0, 2, 0], [0, 4, 0]],
     radius: [1, 0.3, 1],
 })
 
 // Partial cylinder
 scene.addCylinder({
     id: "quarter_pipe",
-    points: [{ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 4 }],
+    points: [[0, 0, 0], [0, 0, 4]],
     radius: [1],
-    slice: { start: 0, end: 90 },
-    direction: { x: 1, y: 0, z: 0 },
+    anglecut: [0, 90],
+    direction: [1, 0, 0],
     rotation: 45,
     color: "#F2C14E"
 })
@@ -195,11 +196,11 @@ Creates 3D convex polyhedra from vertices.
 scene.addPoly3D({
     id: "pyramid",
     points: [
-        { x: 0, y: 0, z: 0 },
-        { x: 2, y: 0, z: 0 },
-        { x: 2, y: 0, z: 2 },
-        { x: 0, y: 0, z: 2 },
-        { x: 1, y: 2, z: 1 }
+        [0, 0, 0],
+        [2, 0, 0],
+        [2, 0, 2],
+        [0, 0, 2],
+        [1, 2, 1]
     ],
     color: "#F2C14E"
 })
@@ -214,7 +215,7 @@ Creates torus, partial torus, or elliptical torus.
 // Torus
 scene.addDonut({
     id: "ring",
-    center: { x: 0, y: 0, z: 0 },
+    center: [0, 0, 0],
     radius: 5,
     thickness: 0.8,
 })
@@ -222,10 +223,10 @@ scene.addDonut({
 // Partial torus
 scene.addDonut({
     id: "arc",
-    center: { x: 0, y: 0, z: 0 },
+    center: [0, 0, 0],
     radius: 4,
     thickness: 0.5,
-    slice: { start: 0, end: 270 },
+    anglecut: [0, 270],
 })
 ```
 
@@ -239,13 +240,13 @@ Groups primitives that move/rotate together.
 ```javascript
 scene.addCylinder({
     id: "arm",
-    points: [{ x: 0, y: 0, z: 0 }, { x: 0, y: -3, z: 0 }],
+    points: [[0, 0, 0], [0, -3, 0]],
     radius: [0.1],
 })
 
 scene.addSphere({
     id: "weight",
-    center: { x: 0, y: -3, z: 0 },
+    center: [0, -3, 0],
     radius: 0.5,
 })
 
@@ -286,7 +287,7 @@ scene.addAxes({
     y: { start: 0, end: 5 },
     z: { start: -5, end: 5 },
     length: 5,
-    position: { x: 0, y: 0, z: 0 }
+    position: [0, 0, 0]
 })
 ```
 
@@ -299,7 +300,7 @@ Creates text labels with Markdown and LaTeX support.
 scene.addLabel({
     id: "velocity",
     text: "Velocity \\(v = 5\\,m/s\\)",
-    position: { x: 3, y: 2, z: 0 },
+    position: [3, 2, 0],
     color: "#E6E8EB",
     fontSizePx: 16
 })

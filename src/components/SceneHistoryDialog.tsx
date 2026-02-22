@@ -22,12 +22,14 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
+import { cn, format_relative_date } from "@/lib/utils";
 import {
   delete_scene,
   load_saved_scenes,
   save_saved_scenes,
   get_active_scene_id,
   clear_active_scene_id,
+  ensure_version_history,
   type SavedScene,
 } from "@/lib/scene/store";
 import { get_starter_scenes } from "@/lib/scene/starter_scenes";
@@ -67,6 +69,10 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
     set_scenes(load_saved_scenes());
   };
 
+  const is_active = (scene_id: string): boolean => {
+    return get_active_scene_id() === scene_id;
+  };
+
   const get_chat_title = (scene_id: string): string => {
     const thread = get_thread(scene_id);
     return thread.title ?? "";
@@ -93,7 +99,8 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
 
     if (missing.length === 0) return;
 
-    const merged = [...existing, ...missing];
+    const withVersions = missing.map((s) => ensure_version_history(s));
+    const merged = [...existing, ...withVersions];
     save_saved_scenes(merged);
     refresh();
     window.dispatchEvent(new CustomEvent("stemify:scenes-changed"));
@@ -143,6 +150,14 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
 
   const has_any = scenes.length > 0;
 
+  const sorted_scenes = useMemo(() => {
+    if (typeof window === "undefined") return scenes;
+    const active_id = get_active_scene_id();
+    const active = scenes.find((s) => s.id === active_id);
+    const others = scenes.filter((s) => s.id !== active_id);
+    return active ? [active, ...others] : scenes;
+  }, [scenes]);
+
   const title = useMemo(() => {
     if (!has_any) return "Scenes";
     return `Scenes (${scenes.length})`;
@@ -153,7 +168,7 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
   return (
     <>
       <Dialog open={open} onOpenChange={set_open}>
-        <DialogContent className="max-w-xl bg-white text-[var(--main-black)] overflow-hidden max-h-[80vh] flex flex-col">
+        <DialogContent className="max-w-xl bg-white text-(--main-black) overflow-hidden max-h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription>
@@ -163,24 +178,49 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
 
           <div className="flex-1 min-h-0 overflow-y-auto">
             <div className="space-y-2 pr-2">
-              {scenes.map((s) => {
+              {sorted_scenes.map((s) => {
                 const chat_title = get_chat_title(s.id);
                 const display_title = chat_title || s.title;
+                const is_current = is_active(s.id);
 
                 return (
                   <div
                     key={s.id}
-                    className="flex items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 min-w-0 gap-2 overflow-hidden"
-                  >
-                    <div
-                      className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-900 cursor-pointer hover:text-zinc-700"
-                      title={display_title}
-                      onClick={() => {
+                    className={cn(
+                      "flex items-center justify-between rounded-lg border px-3 py-2 min-w-0 gap-2 overflow-hidden",
+                      is_current 
+                        ? "border-amber-300 bg-amber-50 sticky top-0 z-10" 
+                        : "border-zinc-200 bg-zinc-50 cursor-pointer hover:bg-zinc-100"
+                    )}
+                    onClick={() => {
+                      if (!is_current) {
                         props.onLoadScene(s);
                         set_open(false);
-                      }}
-                    >
-                      {display_title}
+                        window.dispatchEvent(
+                          new CustomEvent("stemify:scenes-changed", {
+                            detail: { activeId: s.id },
+                          }),
+                        );
+                      }
+                    }}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-zinc-500 shrink-0">
+                          {format_relative_date(s.updatedAt)}
+                        </span>
+                        {is_current && (
+                          <span className="text-[10px] bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded shrink-0 font-medium">
+                            active
+                          </span>
+                        )}
+                      </div>
+                      <div 
+                        className="text-sm font-medium text-zinc-900 truncate"
+                        title={display_title}
+                      >
+                        {display_title}
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-1 shrink-0">
@@ -189,7 +229,8 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-zinc-500 hover:text-red-600"
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();
                           set_confirm_delete_id(s.id);
                         }}
                         title="Delete scene"

@@ -173,3 +173,20 @@ Uses `eslint-config-next` with TypeScript support. Ignores:
 - `scenes/`, `specs/`, `docs/`
 
 Run `npm run lint` before committing changes.
+
+## Additional Guidelines
+
+### React Component Props in "use client" Files
+For serializable props, use "Action" suffix for event handlers:
+- `onGridChange` → `onGridChangeAction`
+- `onCameraModeChange` → `onCameraModeChangeAction`
+- `onResetCamera` → `onResetCameraAction`
+
+### Tailwind CSS 4
+Use canonical class names:
+- `bg-gradient-to-b` → `bg-linear-to-b`
+- `w-[68px]` → `w-17`
+- `w-[22px]` → `w-5.5`
+
+### SavedScene Type
+Old scenes in localStorage may not have `currentVersionId` and `versions` fields. Use `ensure_version_history()` when loading scenes to migrate them.

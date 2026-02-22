@@ -1,6 +1,8 @@
 # Scene API Reference
 
 Call `scene.addX()` methods to create 3D visualizations. All coordinates use arrays `[x, y, z]`, never objects.
+You MUST use primitives first, then groups, custom mesh last. Use addPoly3D for cubes/tetrahedrons, addPoly2D for 2D shapes etc. Use groups of primitives for composite shapes. Only use addCustomMesh when primitives and groups are insufficient to create the scene as intended or require unreasonable sacrifice to detail.
+
 
 ---
 

@@ -154,6 +154,8 @@ export function ChatPanel(props: ChatPanelProps) {
       createdAt: now,
       updatedAt: now,
       sceneCode: "",
+      currentVersionId: null,
+      versions: [],
     };
 
     // Persist the new scene
@@ -331,7 +333,7 @@ export function ChatPanel(props: ChatPanelProps) {
                 onClick={() => {
                   window.dispatchEvent(new Event("stemify:open-history"));
                 }}
-                title="Scene History"
+                title="Scenes"
               >
                 <History className="h-4 w-4" />
               </Button>
@@ -396,7 +398,7 @@ export function ChatPanel(props: ChatPanelProps) {
                 onClick={() => {
                   window.dispatchEvent(new Event("stemify:open-history"));
                 }}
-                title="Scene History"
+                title="Scenes"
               >
                 <History className="h-4 w-4" />
               </Button>
@@ -524,7 +526,7 @@ export function ChatPanel(props: ChatPanelProps) {
                   onClick={() => {
                     window.dispatchEvent(new Event("stemify:open-history"));
                   }}
-                  title="Scene History"
+                  title="Scenes"
                 >
                   <History className="h-4 w-4" />
                 </Button>
@@ -589,7 +591,7 @@ export function ChatPanel(props: ChatPanelProps) {
                   onClick={() => {
                     window.dispatchEvent(new Event("stemify:open-history"));
                   }}
-                  title="Scene History"
+                  title="Scenes"
                 >
                   <History className="h-4 w-4" />
                 </Button>
@@ -670,7 +672,10 @@ export function ChatPanel(props: ChatPanelProps) {
           on_send_user_message={on_send_user_message}
           on_first_assistant_response={on_first_assistant_response}
         >
-          <Thread show_recent_scenes={!props.active_scene} thread_id={thread_id} />
+          <Thread
+            show_recent_scenes={!props.active_scene}
+            thread_id={thread_id}
+          />
         </ChatRuntimeProvider>
       </div>
     </div>

@@ -22,6 +22,7 @@ import { KeyboardShortcut } from "@/components/ui/keyboard-shortcut";
 import { load_chat_mode, save_chat_mode, type ChatMode } from "@/lib/chat/mode";
 import { useChatPrerequisites } from "@/lib/chat/prerequisites";
 import { useEffect, useRef, useState, type FC } from "react";
+import { format_relative_date } from "@/lib/utils";
 
 const SCROLLBAR_STYLES = (
   <style>{`
@@ -392,15 +393,7 @@ const ModeToggle: FC<{
 };
 
 function format_message_time(timestamp: number): string {
-  const date = new Date(timestamp);
-  const month = date.toLocaleString("en-US", { month: "short" });
-  const day = date.getDate();
-  const time = date.toLocaleString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: false,
-  });
-  return `${month} ${day}, ${time}`;
+  return format_relative_date(timestamp);
 }
 
 function extract_model_name(model_id: string | undefined): string | null {

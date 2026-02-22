@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { ConvexGeometry } from "three/examples/jsm/geometries/ConvexGeometry.js";
 import renderMathInElement from "katex/contrib/auto-render";
 import { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 
@@ -608,7 +609,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
     const centerY = snapped_points.reduce((sum, p) => sum + p[1], 0) / snapped_points.length;
     const centerZ = snapped_points.reduce((sum, p) => sum + p[2], 0) / snapped_points.length;
 
-    const geometry = new THREE.BufferGeometry();
+    let geometry = new THREE.BufferGeometry();
     const vertices: number[] = [];
 
     const yValues = snapped_points.map((p) => p[1]);
@@ -626,9 +627,9 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
       }
     }
 
-    const is_convex_polyhedron = basePoints.length >= 3;
+    const is_pyramid = basePoints.length >= 3 && apexPoints.length === 1;
 
-    if (is_convex_polyhedron && apexPoints.length > 0) {
+    if (is_pyramid) {
       const add_triangle = (p1: Vec3, p2: Vec3, p3: Vec3) => {
         vertices.push(
           p1[0] - centerX, p1[1] - centerY, p1[2] - centerZ,
@@ -666,26 +667,15 @@ export function create_scene_api(deps: SceneApiDeps): SceneApi {
         }
       }
     } else {
-      const centroid = new THREE.Vector3();
-      const three_points = snapped_points.map((p) => {
-        const v = v3(p);
-        centroid.add(v);
-        return v;
-      });
-      centroid.divideScalar(snapped_points.length);
-
-      for (let i = 0; i < three_points.length; i++) {
-        const next = (i + 1) % three_points.length;
-        vertices.push(
-          centroid.x - centerX, centroid.y - centerY, centroid.z - centerZ,
-          three_points[i].x - centerX, three_points[i].y - centerY, three_points[i].z - centerZ,
-          three_points[next].x - centerX, three_points[next].y - centerY, three_points[next].z - centerZ
-        );
-      }
+      const three_points = snapped_points.map((p) => new THREE.Vector3(p[0], p[1], p[2]));
+      const convex_geometry = new ConvexGeometry(three_points);
+      geometry = convex_geometry;
     }
 
-    geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
-    geometry.computeVertexNormals();
+    if (vertices.length > 0) {
+      geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+      geometry.computeVertexNormals();
+    }
 
     const material = deps.template.materials.mesh_default.clone();
     if (color) material.color = parse_color(color);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Undo2, Redo2, Copy, Check, Code2, AlertCircle, AlertTriangle, ChevronLeft, ChevronRight, Crosshair, X } from "lucide-react";
+import { FileStack, Copy, Check, Code2, AlertCircle, AlertTriangle, ChevronLeft, ChevronRight, Crosshair, X } from "lucide-react";
 import type { OnMount } from "@monaco-editor/react";
 import type { Monaco } from "@monaco-editor/react";
 
@@ -29,10 +29,7 @@ type ObjectRange = {
 
 type SceneEditorPanelProps = {
   className?: string;
-  onUndo?: () => void;
-  onRedo?: () => void;
-  canUndo?: boolean;
-  canRedo?: boolean;
+  sceneId?: string;
   fullSceneCode: string;
   selectedObjectId: string | null;
   breadcrumbs: string[];
@@ -40,6 +37,7 @@ type SceneEditorPanelProps = {
   update_scene_code_editor: (code: string) => void;
   update_scene_code_storage?: (code: string) => void;
   onApplySceneCode?: (code: string) => void;
+  onUserEditApplied?: () => void;
   isOpen?: boolean;
   onToggle?: () => void;
   onOpen?: () => void;
@@ -50,10 +48,7 @@ const DEBOUNCE_MS = 500;
 
 export function SceneEditorPanel({
   className,
-  onUndo,
-  onRedo,
-  canUndo = false,
-  canRedo = false,
+  sceneId,
   fullSceneCode,
   selectedObjectId,
   breadcrumbs,
@@ -61,6 +56,7 @@ export function SceneEditorPanel({
   update_scene_code_editor,
   update_scene_code_storage,
   onApplySceneCode,
+  onUserEditApplied,
   isOpen = true,
   onToggle,
   onOpen,
@@ -307,7 +303,7 @@ export function SceneEditorPanel({
   }, [fullSceneCode]);
 
   const validateAndApply = useCallback(
-    (code: string) => {
+    (code: string, isUserEdit: boolean = false) => {
       // Strip docs before validation and saving
       const rawCode = strip_docs(code);
       
@@ -341,11 +337,16 @@ export function SceneEditorPanel({
       update_scene_code_storage?.(rawCode);
       onApplySceneCode?.(rawCode);
       
+      // Notify parent that user edit was applied (for version history)
+      if (isUserEdit) {
+        onUserEditApplied?.();
+      }
+      
       // Re-inject docs for display
       const codeWithDocs = append_docs(rawCode);
       setLocalCode(codeWithDocs);
     },
-    [update_scene_code_editor, update_scene_code_storage, onApplySceneCode]
+    [update_scene_code_editor, update_scene_code_storage, onApplySceneCode, onUserEditApplied]
   );
 
   const handleCodeChange = useCallback(
@@ -357,7 +358,7 @@ export function SceneEditorPanel({
       }
 
       debounceRef.current = setTimeout(() => {
-        validateAndApply(value);
+        validateAndApply(value, true);
       }, DEBOUNCE_MS);
     },
     [validateAndApply]
@@ -418,21 +419,15 @@ export function SceneEditorPanel({
             variant="toolbar"
             size="icon"
             className="h-7 w-7"
-            onClick={onUndo}
-            disabled={!canUndo}
-            title="Undo"
+            onClick={() => {
+              if (sceneId) {
+                window.dispatchEvent(new CustomEvent("stemify:open-version-history", { detail: { sceneId } }));
+              }
+            }}
+            disabled={!sceneId}
+            title="Versions"
           >
-            <Undo2 className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="toolbar"
-            size="icon"
-            className="h-7 w-7"
-            onClick={onRedo}
-            disabled={!canRedo}
-            title="Redo"
-          >
-            <Redo2 className="h-4 w-4" />
+            <FileStack className="h-4 w-4" />
           </Button>
         </div>
 

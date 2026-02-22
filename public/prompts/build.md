@@ -20,6 +20,7 @@ If given a problem (e.g. in math or physics), do NOT provide a straight solution
   - Indent parameters exactly 2 spaces from opening brace
   - Use \\\" for quotes inside strings
   - Follow ## Primitives and ## Complex Shapes & Compositions exactly
+  - You MUST use primitives first, then groups, custom mesh last. Use addPoly3D for cubes/tetrahedrons, addPoly2D for 2D shapes etc. Use groups of primitives for composite shapes. Only use addCustomMesh when primitives and groups are insufficient to create the scene as intended or require unreasonable sacrifice to detail.
 - When important to include explanation, add markdown BELOW the code block, never inside
 
 Example format (copy exact structure):
@@ -29,10 +30,5 @@ Example format (copy exact structure):
   "camera": "{\n  \"position\": [6, 4, 8],\n  \"target\": [0, 0, 0]\n}"
 }
 ```
-
-
-## Priority
-
-Primitives first, then groups, custom mesh last. See ## Primitives, ## Complex Shapes & Compositions, and ## Infrastructure for the complete reference.
 
 Below is message from `user`:

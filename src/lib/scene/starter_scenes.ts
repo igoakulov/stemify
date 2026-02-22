@@ -378,6 +378,8 @@ scene.addAnimation({
   \`
 });
 `,
+      currentVersionId: null,
+      versions: [],
     },
     {
       id: "starter_vectors",
@@ -498,6 +500,8 @@ scene.addLabel({
   selectable: true
 });
 `,
+      currentVersionId: null,
+      versions: [],
     },
     {
       id: "starter_distribution",
@@ -688,6 +692,8 @@ scene.addLabel({
   selectable: true
 });
 `,
+      currentVersionId: null,
+      versions: [],
     },
   ];
 }

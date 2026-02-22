@@ -5,7 +5,7 @@ import {
   load_openrouter_api_key,
   load_openrouter_model_id,
 } from "@/lib/settings/storage";
-import { upsert_scene, type SavedScene } from "@/lib/scene/store";
+import { add_version, ensure_version_history, get_effective_scene_code, type SavedScene } from "@/lib/scene/store";
 
 import type { ChatMessage, ChatThreadId } from "@/lib/chat/types";
 import { get_scene_code, parse_model_output } from "@/lib/chat/parse";
@@ -46,15 +46,16 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
   const api_prompt = await load_effective_prompt_md("api");
   const core_prompts = `${system_prompt}\n\n---\n\n${api_prompt}`;
 
-  // 2. System: scene.md (fresh, if scene exists)
+  // 2. System: scene.md (fresh, if scene exists) - use current version's code
+  const effective_scene_code = get_effective_scene_code(options.scene);
   const has_scene_code =
-    options.scene.sceneCode && options.scene.sceneCode.trim().length > 0;
+    effective_scene_code && effective_scene_code.trim().length > 0;
   let scene_context: string | null = null;
   if (has_scene_code) {
     const scene_prompt = await load_effective_prompt_md("scene");
     scene_context = scene_prompt.replace(
       "{{sceneCode}}",
-      options.scene.sceneCode,
+      effective_scene_code,
     );
   }
 
@@ -216,15 +217,15 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
     });
   }
 
-  // Apply scene.
-  upsert_scene({
-    ...options.scene,
-    updatedAt: Date.now(),
-    sceneCode: scene_code,
-  });
+  // Ensure version history exists (for legacy scenes)
+  const scene_with_versions = ensure_version_history(options.scene);
+
+  // Add new version from LLM response
+  add_version(scene_with_versions, options.user_text, scene_code);
+
   window.dispatchEvent(
     new CustomEvent("stemify:scenes-changed", {
-      detail: { activeId: options.scene.id },
+      detail: { activeId: options.scene.id, source: "llm" },
     }),
   );
 }

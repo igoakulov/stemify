@@ -4,11 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { SceneHistoryDialog } from "@/components/SceneHistoryDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
+import { VersionHistoryDialog } from "@/components/VersionHistoryDialog";
 import { SceneViewport } from "@/components/SceneViewport";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { SceneEditorPanel } from "@/components/SceneEditorPanel";
 import { clear_banner } from "@/lib/chat/banner";
 import { load_camera_mode, save_camera_mode, type CameraMode } from "@/lib/scene/camera_mode";
+import { load_grid_snap, save_grid_snap } from "@/lib/scene/global_settings";
 import {
   load_saved_scenes,
   save_saved_scenes,
@@ -16,8 +18,10 @@ import {
   set_active_scene_id,
   clear_active_scene_id,
   type SavedScene,
-  update_scene_grid,
-  upsert_scene,
+  ensure_version_history,
+  update_current_version_code,
+  get_effective_scene_code,
+  increment_user_edit_count,
 } from "@/lib/scene/store";
 import { get_current_abort_controller, set_current_abort_controller } from "@/lib/chat/store";
 import { useSceneSelection } from "@/lib/scene/use_scene_selection";
@@ -26,7 +30,7 @@ import { SCENE_ROOT_ID } from "@/lib/scene/constants";
 
 export function AppShell() {
   const [active_scene, set_active_scene] = useState<SavedScene | null>(null);
-  const [grid_snap, set_grid_snap] = useState(true);
+  const [grid_snap, set_grid_snap] = useState<boolean | null>(null);
   const [camera_mode, set_camera_mode] = useState<CameraMode>("rotate");
   const [showSceneEditor, setShowSceneEditor] = useState(false);
   const [sceneCode, setSceneCode] = useState("");
@@ -34,11 +38,13 @@ export function AppShell() {
   const manualToggleRef = useRef(false);
   const prevSceneRef = useRef<SavedScene | null>(null);
 
-  // Load camera mode from localStorage after mount (avoid hydration mismatch)
+  // Load camera mode and grid snap from localStorage after mount (avoid hydration mismatch)
   useEffect(() => {
     const raf = window.requestAnimationFrame(() => {
-      const saved = load_camera_mode();
-      set_camera_mode(saved);
+      const saved_camera = load_camera_mode();
+      const saved_grid = load_grid_snap();
+      set_camera_mode(saved_camera);
+      set_grid_snap(saved_grid);
     });
     return () => window.cancelAnimationFrame(raf);
   }, []);
@@ -130,8 +136,7 @@ export function AppShell() {
     const still_exists = scenes.find((s) => s.id === active_id) ?? null;
     active_scene_id_ref.current = still_exists?.id ?? null;
     set_active_scene(still_exists);
-    set_grid_snap(still_exists?.grid?.enabled ?? true);
-    setSceneCode(still_exists?.sceneCode ?? "");
+    setSceneCode(still_exists ? get_effective_scene_code(still_exists) : "");
   }, []);
 
   useEffect(() => {
@@ -145,7 +150,6 @@ export function AppShell() {
       if (previous_active) {
         active_scene_id_ref.current = previous_active.id;
         set_active_scene(previous_active);
-        set_grid_snap(previous_active.grid?.enabled ?? true);
         setSceneCode(previous_active.sceneCode ?? "");
       }
     });
@@ -163,7 +167,7 @@ export function AppShell() {
     };
 
     const on_scenes_changed = (event: Event) => {
-      const custom = event as CustomEvent<{ activeId?: string }>;
+      const custom = event as CustomEvent<{ activeId?: string; source?: string }>;
       refresh_from_storage(custom.detail?.activeId);
     };
 
@@ -173,14 +177,12 @@ export function AppShell() {
       if (scene === null) {
         active_scene_id_ref.current = null;
         set_active_scene(null);
-        set_grid_snap(true);
         setSceneCode("");
         clear_active_scene_id();
         clear_banner();
       } else {
         active_scene_id_ref.current = scene.id;
         set_active_scene(scene);
-        set_grid_snap(scene.grid?.enabled ?? true);
         setSceneCode(scene.sceneCode ?? "");
         set_active_scene_id(scene.id);
         clear_banner();
@@ -205,26 +207,26 @@ export function AppShell() {
 
   const update_scene_code_storage = useCallback((code: string) => {
     if (active_scene) {
-      upsert_scene({
-        ...active_scene,
-        sceneCode: code,
-        updatedAt: Date.now(),
-      });
+      const updated_scene = update_current_version_code(active_scene, code);
+      increment_user_edit_count(updated_scene);
       window.dispatchEvent(
         new CustomEvent("stemify:scenes-changed", {
-          detail: { activeId: active_scene.id },
+          detail: { activeId: active_scene.id, source: "user-edit" },
         }),
       );
     } else if (code.trim()) {
       // Create new scene in null state when user types valid code
       const now = Date.now();
-      const new_scene: SavedScene = {
+      let new_scene: SavedScene = {
         id: `scene_${now}`,
         title: "Untitled",
         createdAt: now,
         updatedAt: now,
         sceneCode: code,
+        currentVersionId: null,
+        versions: [],
       };
+      new_scene = ensure_version_history(new_scene);
       const scenes = load_saved_scenes();
       save_saved_scenes([new_scene, ...scenes]);
       set_active_scene_id(new_scene.id);
@@ -234,6 +236,16 @@ export function AppShell() {
         }),
       );
     }
+  }, [active_scene]);
+
+  const on_user_edit_applied = useCallback(() => {
+    if (!active_scene) return;
+    
+    // Note: We don't call increment_user_edit_count here because:
+    // 1. update_current_version_code already saves to storage
+    // 2. Calling increment_user_edit_count would use stale active_scene
+    //    and overwrite the new code with old data
+    // Edit count will be incremented on next LLM response or manual action
   }, [active_scene]);
 
   // Clear selection when scene changes (including initial load and zero state)
@@ -261,27 +273,25 @@ export function AppShell() {
               <div className="relative flex-1 min-h-0">
                   <SceneViewport 
                     key={active_scene?.id} 
-                    sceneCode={active_scene?.sceneCode ?? ""} 
+                    sceneCode={active_scene ? get_effective_scene_code(active_scene) : ""} 
                     sceneId={active_scene?.id ?? ""}
-                    gridSnap={grid_snap}
+                    gridSnap={grid_snap ?? true}
                     cameraMode={camera_mode}
-                    onCameraModeChange={(mode) => {
+                    onCameraModeChangeAction={(mode) => {
                       save_camera_mode(mode);
                       set_camera_mode(mode);
                       window.dispatchEvent(new CustomEvent("stemify:camera-mode-change", { detail: { mode } }));
                     }}
-                    onResetCamera={() => window.dispatchEvent(new Event("stemify:camera-reset"))}
-                    onGoHome={() => {
+                    onResetCameraAction={() => window.dispatchEvent(new Event("stemify:camera-reset"))}
+                    onGoHomeAction={() => {
                       window.dispatchEvent(new Event("stemify:confirm-new-scene"));
                     }}
-                    onGridChange={(enabled) => {
+                    onGridChangeAction={(enabled) => {
                       set_grid_snap(enabled);
-                      if (active_scene?.id) {
-                        update_scene_grid(active_scene.id, { enabled });
-                      }
+                      save_grid_snap(enabled);
                     }}
-                    onDrillUp={handleDrillUp}
-                    onDrillDown={handleDrillDown}
+                    onDrillUpAction={handleDrillUp}
+                    onDrillDownAction={handleDrillDown}
                   />
                 </div>
             </div>
@@ -291,6 +301,7 @@ export function AppShell() {
               }}
             />
             <SettingsDialog />
+            <VersionHistoryDialog />
           </section>
 
           <aside className="flex h-full flex-col overflow-hidden">
@@ -307,6 +318,7 @@ export function AppShell() {
             <div className={`shrink-0 transition-all duration-100 ease-in-out ${showSceneEditor ? "h-[40%] min-h-37.5" : "h-8.5"}`}>
               <SceneEditorPanel
                 fullSceneCode={sceneCode}
+                sceneId={active_scene?.id}
                 selectedObjectId={selectedObjectId}
                 breadcrumbs={breadcrumbs}
                 onBreadcrumbClick={(id, index) => {
@@ -317,6 +329,7 @@ export function AppShell() {
                 }}
                 update_scene_code_editor={update_scene_code_editor}
                 update_scene_code_storage={update_scene_code_storage}
+                onUserEditApplied={on_user_edit_applied}
                 isOpen={showSceneEditor}
                 onToggle={() => {
                   manualToggleRef.current = true;

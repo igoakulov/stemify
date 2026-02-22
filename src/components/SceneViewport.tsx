@@ -21,25 +21,29 @@ import {
   create_default_axes,
 } from "@/lib/three/base_template";
 import { get_start_object_id, useSceneEditorStore, set_validation_error, set_validation_errors, set_warnings } from "@/lib/scene/editor_store";
+import { ensure_version_history } from "@/lib/scene/store";
 import { SCENE_ROOT_ID } from "@/lib/scene/constants";
 import { type CameraMode } from "@/lib/scene/camera_mode";
+import { load_fly_speed_index, save_fly_speed_index } from "@/lib/scene/global_settings";
 
 export type SceneViewportProps = {
   sceneCode: string;
   sceneId: string;
   gridSnap?: boolean;
-  onGridChange?: (enabled: boolean) => void;
+  onGridChangeAction?: (enabled: boolean) => void;
   cameraMode?: CameraMode;
-  onCameraModeChange?: (mode: CameraMode) => void;
-  onResetCamera?: () => void;
-  onGoHome?: () => void;
-  onDrillUp?: () => void;
-  onDrillDown?: () => void;
+  onCameraModeChangeAction?: (mode: CameraMode) => void;
+  onResetCameraAction?: () => void;
+  onGoHomeAction?: () => void;
+  onDrillUpAction?: () => void;
+  onDrillDownAction?: () => void;
 };
 
 const HOVER_COLOR = 0xfbbf24;
 const HOVER_OPACITY = 0.2;
 const SELECTED_OPACITY = 0.6;
+
+const FLY_SPEED_OPTIONS = [1, 5, 10, 25, 50, 100];
 
 export function SceneViewport(props: SceneViewportProps) {
   const canvas_ref = useRef<HTMLCanvasElement | null>(null);
@@ -63,8 +67,7 @@ export function SceneViewport(props: SceneViewportProps) {
   const [tooltip, setTooltip] = useState<HoverData | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isFlyMode, setIsFlyMode] = useState(false);
-  const flySpeedOptions = [1, 5, 10, 25, 50, 100];
-  const [flySpeedIndex, setFlySpeedIndex] = useState(1); // default to 5x
+  const [flySpeedIndex, setFlySpeedIndex] = useState<number | null>(null);
   const getSpeedIcon = (speed: number) => {
     switch (speed) {
       case 1: return <Turtle className="w-3 h-3" />;
@@ -91,6 +94,15 @@ export function SceneViewport(props: SceneViewportProps) {
   const applyHoverHighlightRef = useRef<(objectId: string | null) => void>(() => {});
   const applySelectionHighlightRef = useRef<(objectId: string | null) => void>(() => {});
   const clearSelectionHighlightRef = useRef<() => void>(() => {});
+
+  // Load fly speed index from global storage after mount (avoid hydration mismatch)
+  useEffect(() => {
+    const raf = window.requestAnimationFrame(() => {
+      const saved = load_fly_speed_index();
+      setFlySpeedIndex(saved);
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, []);
 
   // Sync with external selection events (like keyboard shortcuts, breadcrumbs clicks)
   // Also recalculates breadcrumbs if missing (e.g., when clicking breadcrumb in AppShell)
@@ -194,8 +206,8 @@ export function SceneViewport(props: SceneViewportProps) {
 
   // Update fly controls speed when changed
   useEffect(() => {
-    if (fly_controls_ref.current) {
-      fly_controls_ref.current.setSpeed(flySpeedOptions[flySpeedIndex]);
+    if (fly_controls_ref.current && flySpeedIndex !== null) {
+      fly_controls_ref.current.setSpeed(FLY_SPEED_OPTIONS[flySpeedIndex]);
     }
   }, [flySpeedIndex]);
 
@@ -633,13 +645,15 @@ export function SceneViewport(props: SceneViewportProps) {
     // Validate scene code before clearing anything
     // This prevents clearing the scene when validation fails
     const validate_scene_code_internal = (code: string): ReturnType<typeof validate_scene> => {
-      const scene_obj = {
+      const scene_obj = ensure_version_history({
         id: props.sceneId,
         sceneCode: code,
         title: "",
         createdAt: 0,
         updatedAt: 0,
-      };
+        currentVersionId: null,
+        versions: [],
+      });
       return validate_scene(scene_obj);
     };
 
@@ -727,13 +741,15 @@ export function SceneViewport(props: SceneViewportProps) {
         user_message: "",
         error_message: error_msg,
         invalid_json: code,
-        scene: {
+        scene: ensure_version_history({
           id: props.sceneId,
           sceneCode: code,
           title: "",
           createdAt: 0,
           updatedAt: 0,
-        },
+          currentVersionId: null,
+          versions: [],
+        }),
         mode: "build",
       });
       const config = BANNERS.INVALID_SCENE_CODE;
@@ -876,14 +892,15 @@ export function SceneViewport(props: SceneViewportProps) {
     const new_enabled = props.gridSnap ?? true;
     if (grid_state_ref.current.enabled !== new_enabled) {
       grid_state_ref.current.enabled = new_enabled;
-      props.onGridChange?.(new_enabled);
+      props.onGridChangeAction?.(new_enabled);
     }
-  }, [props.gridSnap, props.onGridChange]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.gridSnap, props.onGridChangeAction]);
 
   return (
     <div
       ref={label_container_ref}
-      className="relative h-full w-full overflow-hidden rounded-r-2xl bg-gradient-to-b from-zinc-900 to-[var(--main-black)]"
+      className="relative h-full w-full overflow-hidden rounded-r-2xl bg-linear-to-b from-zinc-900 to-(--main-black)"
     >
       <canvas ref={canvas_ref} className="h-full w-full" />
 
@@ -893,7 +910,7 @@ export function SceneViewport(props: SceneViewportProps) {
           {/* Logo */}
           <button
             type="button"
-            onClick={props.onGoHome}
+            onClick={props.onGoHomeAction}
             className="text-sm font-semibold text-white/80 tracking-tight px-1 select-none hover:text-white transition-colors cursor-pointer"
           >
             Stemify
@@ -905,9 +922,9 @@ export function SceneViewport(props: SceneViewportProps) {
           {/* Grid Toggle - same width as mode toggle */}
           <button
             type="button"
-            onClick={() => props.onGridChange?.(!(props.gridSnap ?? true))}
+            onClick={() => props.onGridChangeAction?.(!(props.gridSnap ?? true))}
             className={cn(
-              "flex items-center gap-1.5 px-2 py-0.5 rounded transition-all duration-150 w-[68px]",
+              "flex items-center gap-1.5 px-2 py-0.5 rounded transition-all duration-150 w-17",
               "border text-[10px]",
               props.gridSnap ?? true
                 ? "bg-amber-500/20 border-amber-500/30 text-amber-400 hover:bg-amber-500/30"
@@ -922,7 +939,7 @@ export function SceneViewport(props: SceneViewportProps) {
           <div className="flex items-center gap-0.5">
             <KeyboardShortcut
               keys={["R"]}
-              onTrigger={props.onResetCamera ?? (() => {})}
+              onTrigger={props.onResetCameraAction ?? (() => {})}
               shortcutId="scene-reset"
               className="border border-white/5 bg-white/5"
             />
@@ -933,13 +950,13 @@ export function SceneViewport(props: SceneViewportProps) {
           <div className="flex items-center gap-0.5">
             <KeyboardShortcut
               keys={["["]}
-              onTrigger={props.onDrillUp ?? (() => {})}
+              onTrigger={props.onDrillUpAction ?? (() => {})}
               shortcutId="drill-up"
               className="border border-white/5 bg-white/5"
             />
             <KeyboardShortcut
               keys={["]"]}
-              onTrigger={props.onDrillDown ?? (() => {})}
+              onTrigger={props.onDrillDownAction ?? (() => {})}
               shortcutId="drill-down"
               className="border border-white/5 bg-white/5"
             />
@@ -949,9 +966,9 @@ export function SceneViewport(props: SceneViewportProps) {
           {/* Mode Toggle */}
           <button
             type="button"
-            onClick={() => props.onCameraModeChange?.(isFlyMode ? "rotate" : "fly")}
+            onClick={() => props.onCameraModeChangeAction?.(isFlyMode ? "rotate" : "fly")}
             className={cn(
-              "flex items-center gap-1.5 px-2 py-0.5 rounded transition-all duration-150 w-[68px]",
+              "flex items-center gap-1.5 px-2 py-0.5 rounded transition-all duration-150 w-17",
               "border text-[10px]",
               isFlyMode
                 ? "bg-amber-500/20 border-amber-500/30 text-amber-400 hover:bg-amber-500/30"
@@ -970,12 +987,12 @@ export function SceneViewport(props: SceneViewportProps) {
           {isFlyMode && (
             <>
               {/* Divider - mode toggle width */}
-              <div className="w-[68px] h-px bg-white/10" />
+              <div className="w-17 h-px bg-white/10" />
 
               {/* Move - W centered above AS D */}
               <div className="flex flex-col items-start gap-0.5">
                 <div className="flex items-center gap-0.5">
-                  <span className="w-[22px]" />
+                  <span className="w-5.5" />
                   <KeyboardShortcut keys={["W"]} onTrigger={() => {}} forceActive={flyKeys.forward} className="border border-white/5 bg-white/5" />
                 </div>
                 <div className="flex items-center gap-0.5">
@@ -1005,15 +1022,19 @@ export function SceneViewport(props: SceneViewportProps) {
                 <input
                   type="range"
                   min="0"
-                  max={flySpeedOptions.length - 1}
+                  max={FLY_SPEED_OPTIONS.length - 1}
                   step="1"
-                  value={flySpeedIndex}
-                  onChange={(e) => setFlySpeedIndex(Number(e.target.value))}
+                  value={flySpeedIndex ?? 1}
+                  onChange={(e) => {
+                    const value = Number(e.target.value);
+                    setFlySpeedIndex(value);
+                    save_fly_speed_index(value);
+                  }}
                   className="w-16 h-1 bg-white/20 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2 [&::-webkit-slider-thumb]:h-2 [&::-webkit-slider-thumb]:bg-white/80 [&::-webkit-slider-thumb]:rounded-full"
                 />
                 <div className="flex items-center gap-1 text-white/50">
-                  {getSpeedIcon(flySpeedOptions[flySpeedIndex])}
-                  <span className="text-[10px]">{flySpeedOptions[flySpeedIndex]}x</span>
+                  {getSpeedIcon(FLY_SPEED_OPTIONS[flySpeedIndex ?? 1])}
+                  <span className="text-[10px]">{FLY_SPEED_OPTIONS[flySpeedIndex ?? 1]}x</span>
                 </div>
               </div>
 

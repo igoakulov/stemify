@@ -238,7 +238,7 @@ export function SettingsDialog() {
 
   return (
     <Dialog open={open} onOpenChange={set_open}>
-      <DialogContent className="max-w-2xl bg-white text-[var(--main-black)]">
+      <DialogContent className="max-w-2xl bg-white text-(--main-black)">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
         </DialogHeader>

@@ -87,25 +87,8 @@ const CollapsibleCodeBlock: FC<{ children: ReactNode; className?: string }> = ({
   const { isStreamingThisMessage, mode } = useStreamingContext();
   const codeText = extractCodeText(children);
 
-  // Try to extract scene field from JSON BEFORE transforming escapes
-  // This way we get the raw scene code which is valid JSON string
-  let extractedScene = null;
-  const looksLikeJsonScene = codeText.trim().startsWith('{') && codeText.includes('"scene":');
-  
-  if (looksLikeJsonScene) {
-    try {
-      const parsed = JSON.parse(codeText);
-      if (parsed.scene && typeof parsed.scene === 'string') {
-        extractedScene = parsed.scene;
-      }
-    } catch {
-      // Not valid JSON
-    }
-  }
-
-  // Transform escape sequences - work on either extracted scene or original code
-  const transformedCode = extractedScene || codeText;
-  const formattedCode = transformedCode
+  // Transform escape sequences
+  const formattedCode = codeText
     .replace(/\\n/g, "\n")
     .replace(/\\"/g, '"')
     .replace(/\n\n+/g, "\n");
@@ -119,8 +102,8 @@ const CollapsibleCodeBlock: FC<{ children: ReactNode; className?: string }> = ({
 
   const { isCopied, copyToClipboard } = useCopyToClipboard();
 
-  // Determine label based on whether this is a scene code block
-  const isSceneCode = extractedScene !== null;
+  // Determine label based on whether this contains scene.* method calls
+  const isSceneCode = /scene\.\w+/.test(codeText);
   const label = isSceneCode ? "scene code" : "code";
 
   // Helper to strip markdown fences for comparison

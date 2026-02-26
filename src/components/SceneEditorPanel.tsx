@@ -17,7 +17,7 @@ import {
   next_error,
   prev_error,
 } from "@/lib/scene/editor_store";
-import { append_docs, strip_docs, get_docs_marker, format_scene_code } from "@/lib/scene/comments";
+import { append_docs, strip_docs, get_docs_marker, format_scene_code } from "@/lib/scene/inline_docs";
 import { validate_scene_code, type ValidationError as ValidationErrorType } from "@/lib/scene/validation";
 import { SCENE_ROOT_ID } from "@/lib/scene/constants";
 
@@ -78,6 +78,7 @@ export function SceneEditorPanel({
   const errorPanelRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
+  const isValidatingRef = useRef(false);
   const [copied, setCopied] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
@@ -284,6 +285,9 @@ export function SceneEditorPanel({
 
   // Sync when fullSceneCode changes externally (e.g., from LLM or page reload)
   useEffect(() => {
+    // Skip sync if this change came from user editing - validation already handled formatting
+    if (isValidatingRef.current) return;
+    
     if (fullSceneCode !== lastSyncedCodeRef.current) {
       lastSyncedCodeRef.current = fullSceneCode;
       
@@ -304,47 +308,54 @@ export function SceneEditorPanel({
 
   const validateAndApply = useCallback(
     (code: string, isUserEdit: boolean = false) => {
-      // Strip docs before validation and saving
-      const rawCode = strip_docs(code);
+      // Track validation state to prevent sync during user edits
+      isValidatingRef.current = true;
       
-      if (!rawCode.trim()) {
+      try {
+        // Strip docs before validation and saving
+        const rawCode = strip_docs(code);
+        
+        if (!rawCode.trim()) {
+          set_validation_error(null);
+          set_validation_errors([]);
+          set_warnings([]);
+          
+          // In empty code - clear everything
+          update_scene_code_editor("");
+          update_scene_code_storage?.("");
+          onApplySceneCode?.("");
+          return;
+        }
+
+        const result = validate_scene_code(rawCode);
+        if (!result.ok) {
+          set_validation_error(result.errors.length > 0 ? result.errors[0].message : "Invalid scene code");
+          set_validation_errors(result.errors);
+          return;
+        }
+
         set_validation_error(null);
         set_validation_errors([]);
-        set_warnings([]);
         
-        // In empty code - clear everything
-        update_scene_code_editor("");
-        update_scene_code_storage?.("");
-        onApplySceneCode?.("");
-        return;
+        // Store warnings
+        set_warnings(result.warnings);
+        
+        // Save RAW code (no docs) to storage and viewport
+        // Note: NOT updating fullSceneCode here - sync only happens on external changes (LLM, reload)
+        update_scene_code_storage?.(rawCode);
+        onApplySceneCode?.(rawCode);
+        
+        // Notify parent that user edit was applied (for version history)
+        if (isUserEdit) {
+          onUserEditApplied?.();
+        }
+        
+        // Re-inject docs for display
+        const codeWithDocs = append_docs(rawCode);
+        setLocalCode(codeWithDocs);
+      } finally {
+        isValidatingRef.current = false;
       }
-
-      const result = validate_scene_code(rawCode);
-      if (!result.ok) {
-        set_validation_error(result.errors.length > 0 ? result.errors[0].message : "Invalid scene code");
-        set_validation_errors(result.errors);
-        return;
-      }
-
-      set_validation_error(null);
-      set_validation_errors([]);
-      
-      // Store warnings
-      set_warnings(result.warnings);
-      
-      // Save RAW code (no docs) to storage and viewport
-      // Note: NOT updating fullSceneCode here - sync only happens on external changes (LLM, reload)
-      update_scene_code_storage?.(rawCode);
-      onApplySceneCode?.(rawCode);
-      
-      // Notify parent that user edit was applied (for version history)
-      if (isUserEdit) {
-        onUserEditApplied?.();
-      }
-      
-      // Re-inject docs for display
-      const codeWithDocs = append_docs(rawCode);
-      setLocalCode(codeWithDocs);
     },
     [update_scene_code_editor, update_scene_code_storage, onApplySceneCode, onUserEditApplied]
   );
@@ -411,7 +422,10 @@ export function SceneEditorPanel({
   const showCopyButton = isHovered || isFocused;
 
   return (
-    <div className={cn("flex h-full flex-col overflow-hidden", className)}>
+    <div 
+      className={cn("flex h-full flex-col overflow-hidden", className)}
+      data-scene-editor-focused={isFocused}
+    >
       {/* Toolbar */}
       <div className="flex items-center gap-4 px-4 py-1 border-t border-b border-white/5 shrink-0">
         <div className="flex items-center -mx-1">

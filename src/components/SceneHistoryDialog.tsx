@@ -32,8 +32,8 @@ import {
   ensure_version_history,
   type SavedScene,
 } from "@/lib/scene/store";
-import { get_starter_scenes } from "@/lib/scene/starter_scenes";
-import { get_thread, remove_thread } from "@/lib/chat/store";
+import { get_starter_scenes } from "@/lib/scene/starters";
+import { remove_thread } from "@/lib/chat/store";
 
 function make_confirm_dialog_key_handler(
   on_confirm: () => void,
@@ -71,11 +71,6 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
 
   const is_active = (scene_id: string): boolean => {
     return get_active_scene_id() === scene_id;
-  };
-
-  const get_chat_title = (scene_id: string): string => {
-    const thread = get_thread(scene_id);
-    return thread.title ?? "";
   };
 
   const confirm_delete = (scene_id: string) => {
@@ -179,8 +174,6 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
           <div className="flex-1 min-h-0 overflow-y-auto">
             <div className="space-y-2 pr-2">
               {sorted_scenes.map((s) => {
-                const chat_title = get_chat_title(s.id);
-                const display_title = chat_title || s.title;
                 const is_current = is_active(s.id);
 
                 return (
@@ -217,9 +210,9 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
                       </div>
                       <div 
                         className="text-sm font-medium text-zinc-900 truncate"
-                        title={display_title}
+                        title={s.title}
                       >
-                        {display_title}
+                        {s.title}
                       </div>
                     </div>
 

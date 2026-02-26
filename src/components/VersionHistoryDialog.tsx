@@ -243,8 +243,8 @@ export function VersionHistoryDialog() {
 
               {versions.length === 0 ? (
                 <div className="rounded-md border border-dashed border-zinc-200 p-6 text-sm text-zinc-500">
-                  No versions yet. Versions are created when you receive a
-                  response from the AI or when you first create a scene.
+                  Ask the Assistant to BUILD your first version or add code in
+                  Scene Editor yourself!
                 </div>
               ) : null}
             </div>

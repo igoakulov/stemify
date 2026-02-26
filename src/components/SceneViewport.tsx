@@ -5,11 +5,11 @@ import * as THREE from "three";
 
 import { create_three_base_template, type ThreeBaseTemplate } from "@/lib/three/base_template";
 import { create_fly_controls, type FlyControls } from "@/lib/three/fly_controls";
-import { create_scene_api, create_default_grid_state, type GridState } from "@/lib/scene/scene_api";
+import { create_scene_api, create_default_grid_state, type GridState, type SceneApiReturn } from "@/lib/scene/scene_api";
 import { ObjectRegistry, type HoverData } from "@/lib/scene/object_registry";
 import { execute_scene_code } from "@/lib/scene/execute_scene_code";
-import { validate_scene } from "@/lib/scene/validation";
-import { parse_model_output, get_scene_code } from "@/lib/chat/parse";
+import { validate_scene, validate_scene_code } from "@/lib/scene/validation";
+import { parse_model_output } from "@/lib/chat/parse";
 import { get_thread } from "@/lib/chat/store";
 import { show_error, show_warning, BANNERS, prepare_error_context } from "@/lib/chat/banner";
 import { KeyboardShortcut } from "@/components/ui/keyboard-shortcut";
@@ -21,7 +21,6 @@ import {
   create_default_axes,
 } from "@/lib/three/base_template";
 import { get_start_object_id, useSceneEditorStore, set_validation_error, set_validation_errors, set_warnings } from "@/lib/scene/editor_store";
-import { ensure_version_history } from "@/lib/scene/store";
 import { SCENE_ROOT_ID } from "@/lib/scene/constants";
 import { type CameraMode } from "@/lib/scene/camera_mode";
 import { load_fly_speed_index, save_fly_speed_index } from "@/lib/scene/global_settings";
@@ -64,6 +63,7 @@ export function SceneViewport(props: SceneViewportProps) {
   const mouse_down_pos_ref = useRef<{ x: number; y: number } | null>(null);
   const mouse_down_time_ref = useRef<number>(0);
   const fly_controls_ref = useRef<FlyControls | null>(null);
+  const scene_api_result_ref = useRef<SceneApiReturn | null>(null);
   const [tooltip, setTooltip] = useState<HoverData | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isFlyMode, setIsFlyMode] = useState(false);
@@ -603,6 +603,12 @@ export function SceneViewport(props: SceneViewportProps) {
     grid_state.enabled = props.gridSnap ?? true;
     grid_state_ref.current = grid_state;
 
+    // Create registry and scene_api once (reused across all executions)
+    const registry = new ObjectRegistry();
+    registry_ref.current = registry;
+    const scene_api_result = create_scene_api({ template: runtime, registry, gridConfig: grid_state });
+    scene_api_result_ref.current = scene_api_result;
+
     // Start render loop unconditionally - grid/template should always be visible
     let lastTime = performance.now();
     const loop = (time: number) => {
@@ -642,24 +648,43 @@ export function SceneViewport(props: SceneViewportProps) {
     };
     raf_ref.current = window.requestAnimationFrame(loop);
 
+    // Extract camera config from scene code
+    function extract_camera_from_code(code: string): { position?: [number, number, number]; lookat?: [number, number, number] } | null {
+      const match = code.match(/scene\.camera\(\s*\{([^}]+)\}\s*\)/);
+      if (!match) return null;
+
+      const configStr = match[1];
+      const result: { position?: [number, number, number]; lookat?: [number, number, number] } = {};
+
+      const posMatch = configStr.match(/position:\s*\[([^\]]+)\]/);
+      if (posMatch) {
+        const coords = posMatch[1].split(",").map((s) => parseFloat(s.trim()));
+        if (coords.length === 3 && coords.every((c) => !isNaN(c))) {
+          result.position = coords as [number, number, number];
+        }
+      }
+
+      const lookatMatch = configStr.match(/lookat:\s*\[([^\]]+)\]/);
+      if (lookatMatch) {
+        const coords = lookatMatch[1].split(",").map((s) => parseFloat(s.trim()));
+        if (coords.length === 3 && coords.every((c) => !isNaN(c))) {
+          result.lookat = coords as [number, number, number];
+        }
+      }
+
+      return Object.keys(result).length > 0 ? result : null;
+    }
+
     // Validate scene code before clearing anything
     // This prevents clearing the scene when validation fails
-    const validate_scene_code_internal = (code: string): ReturnType<typeof validate_scene> => {
-      const scene_obj = ensure_version_history({
-        id: props.sceneId,
-        sceneCode: code,
-        title: "",
-        createdAt: 0,
-        updatedAt: 0,
-        currentVersionId: null,
-        versions: [],
-      });
-      return validate_scene(scene_obj);
+    const validate_scene_code_internal = (code: string): ReturnType<typeof validate_scene_code> => {
+      return validate_scene_code(code);
     };
 
     // Execute scene code function - assumes validation already passed
     // Creates fresh registry and scene_api, clears scene, then executes
     const execute_validated_scene = (code: string, validation: ReturnType<typeof validate_scene>) => {
+      console.log("[DEBUG] execute_validated_scene called, code length:", code.length, "includes stretch:", code.includes("stretch"));
       // Clear errors in editor store
       set_validation_error(null);
       set_validation_errors([]);
@@ -682,12 +707,12 @@ export function SceneViewport(props: SceneViewportProps) {
         runtime.scene.add(create_default_axes());
       }
 
-      // Create fresh registry and scene_api for this execution
-      const registry = new ObjectRegistry();
-      registry_ref.current = registry;
-      const scene_api = create_scene_api({ template: runtime, registry, gridConfig: grid_state });
+      // Reuse existing registry and scene_api - just reset them
+      const scene_api_result = scene_api_result_ref.current;
+      scene_api_result?.reset();
+      registry_ref.current?.clear();
 
-      const exec_error = execute_scene_code(code, scene_api);
+      const exec_error = execute_scene_code(code, scene_api_result!.api);
       if (exec_error) {
         set_validation_error(exec_error.message);
         set_validation_errors([{ type: "runtime", message: exec_error.message }]);
@@ -741,15 +766,14 @@ export function SceneViewport(props: SceneViewportProps) {
         user_message: "",
         error_message: error_msg,
         invalid_json: code,
-        scene: ensure_version_history({
+        scene: {
           id: props.sceneId,
-          sceneCode: code,
           title: "",
           createdAt: 0,
           updatedAt: 0,
           currentVersionId: null,
           versions: [],
-        }),
+        },
         mode: "build",
       });
       const config = BANNERS.INVALID_SCENE_CODE;
@@ -764,6 +788,7 @@ export function SceneViewport(props: SceneViewportProps) {
     // 2. If no sceneCode, try to recover from last BUILD message in chat
     // 3. If no BUILD message with JSON found, leave template visible (grid)
     let code_to_execute = props.sceneCode;
+    console.log("[DEBUG] SceneViewport received sceneCode, length:", code_to_execute?.length ?? 0, "has stretch:", code_to_execute?.includes("stretch") ?? false);
     let should_attempt_recovery = false;
 
     // Check if we need to attempt BUILD recovery
@@ -801,16 +826,11 @@ export function SceneViewport(props: SceneViewportProps) {
             if (content.trim().startsWith("{")) {
               json_found = true;
 
-              // Try to parse as JSON
+              // Try to parse as scene code
               const parsed = parse_model_output(content, "build");
 
-              if (parsed.kind === "json") {
-                const recovered_code = get_scene_code(parsed.payload);
-                if (recovered_code) {
-                  code_to_execute = recovered_code;
-                  break;
-                }
-                invalid_json = true;
+              if (parsed.kind === "scene") {
+                code_to_execute = parsed.code;
               } else {
                 invalid_json = true;
               }
@@ -840,7 +860,33 @@ export function SceneViewport(props: SceneViewportProps) {
 
     // Execute scene code if available
     if (code_to_execute && code_to_execute.trim().length > 0) {
+      // Apply camera from scene code if present (only on initial load)
+      const cameraConfig = extract_camera_from_code(code_to_execute);
+      if (cameraConfig) {
+        runtime.set_default_camera(cameraConfig.position, cameraConfig.lookat);
+        if (cameraConfig.position) {
+          runtime.camera.position.set(
+            cameraConfig.position[0],
+            cameraConfig.position[1],
+            cameraConfig.position[2]
+          );
+        }
+        if (cameraConfig.lookat) {
+          runtime.controls.target.set(
+            cameraConfig.lookat[0],
+            cameraConfig.lookat[1],
+            cameraConfig.lookat[2]
+          );
+        }
+        runtime.controls.update();
+      }
+
       const validation = validate_scene_code_internal(code_to_execute);
+      console.log("[DEBUG] Executing scene code, stretch present:", code_to_execute.includes("stretch"));
+      if (code_to_execute.includes("stretch")) {
+        const stretchMatches = code_to_execute.match(/stretch:\s*\[[^\]]+\]/g);
+        console.log("[DEBUG] Stretch values found:", stretchMatches);
+      }
       if (validation.ok) {
         execute_validated_scene(code_to_execute, validation);
       } else {
@@ -873,11 +919,17 @@ export function SceneViewport(props: SceneViewportProps) {
         window.cancelAnimationFrame(raf_ref.current);
       }
 
+      // Cancel animation loop before cleaning up scene_api_ref
+      if (scene_api_result_ref.current) {
+        scene_api_result_ref.current.cancel_animation();
+      }
+
       runtime.dispose();
       fly_controls.dispose();
       runtime_ref.current = null;
       fly_controls_ref.current = null;
       registry_ref.current = null;
+      scene_api_result_ref.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.sceneCode, props.sceneId, props.gridSnap, handleClick, handleMouseMove, handleMouseLeave, handleMouseDown, handleDrillUp, handleDrillDown, handleLabelClick, clearHighlight]);
@@ -1005,8 +1057,8 @@ export function SceneViewport(props: SceneViewportProps) {
 
               {/* Up/Down */}
               <div className="flex items-center gap-0.5">
-                <KeyboardShortcut keys={["Shift"]} onTrigger={() => {}} forceActive={flyKeys.down} className="border border-white/5 bg-white/5" />
                 <KeyboardShortcut keys={["Space"]} onTrigger={() => {}} forceActive={flyKeys.up} className="border border-white/5 bg-white/5" />
+                <KeyboardShortcut keys={["Shift"]} onTrigger={() => {}} forceActive={flyKeys.down} className="border border-white/5 bg-white/5" />
                 <span className="text-[10px] text-white/50 ml-1">up/down</span>
               </div>
 

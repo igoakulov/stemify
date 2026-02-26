@@ -61,7 +61,7 @@ export function create_fly_controls(config: FlyControlsConfig): FlyControls {
 
     // Skip if typing in input
     const target = e.target as HTMLElement;
-    if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
+    if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable || target.closest("[data-scene-editor-focused]")) return;
 
     switch (e.code) {
       case "KeyW":

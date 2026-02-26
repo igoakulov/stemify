@@ -71,7 +71,8 @@ export const KeyboardShortcut: FC<KeyboardShortcutProps> = ({
           target.tagName === "INPUT" ||
           target.tagName === "TEXTAREA" ||
           target.isContentEditable ||
-          target.closest("[contenteditable]")
+          target.closest("[contenteditable]") ||
+          target.closest("[data-scene-editor-focused]")
         ) {
           return;
         }

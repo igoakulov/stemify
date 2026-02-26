@@ -36,6 +36,7 @@ export type ThreeBaseTemplate = {
   materials: StyleMaterials;
 
   reset_camera: () => void;
+  set_default_camera: (position?: [number, number, number], target?: [number, number, number]) => void;
   dispose: () => void;
 };
 
@@ -71,6 +72,11 @@ export function create_three_base_template(
   const default_camera_position = new THREE.Vector3(6, 4, 8);
   const default_camera_target = new THREE.Vector3(0, 0, 0);
 
+  // eslint-disable-next-line prefer-const
+  let custom_default_position = new THREE.Vector3(6, 4, 8);
+  // eslint-disable-next-line prefer-const
+  let custom_default_target = new THREE.Vector3(0, 0, 0);
+
   camera.position.copy(default_camera_position);
   camera.lookAt(default_camera_target);
 
@@ -97,10 +103,23 @@ export function create_three_base_template(
 
   scene.add(create_default_axes());
 
+  const set_default_camera = (position?: [number, number, number], target?: [number, number, number]) => {
+    if (position) {
+      custom_default_position.set(position[0], position[1], position[2]);
+    } else {
+      custom_default_position.set(6, 4, 8);
+    }
+    if (target) {
+      custom_default_target.set(target[0], target[1], target[2]);
+    } else {
+      custom_default_target.set(0, 0, 0);
+    }
+  };
+
   const reset_camera = () => {
-    camera.position.copy(default_camera_position);
-    controls.target.copy(default_camera_target);
-    camera.lookAt(default_camera_target);
+    camera.position.copy(custom_default_position);
+    controls.target.copy(custom_default_target);
+    camera.lookAt(custom_default_target);
     controls.update();
   };
 
@@ -126,6 +145,7 @@ export function create_three_base_template(
     controls,
     materials,
     reset_camera,
+    set_default_camera,
     dispose,
   };
 }

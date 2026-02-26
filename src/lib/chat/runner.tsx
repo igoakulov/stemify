@@ -5,10 +5,11 @@ import {
   load_openrouter_api_key,
   load_openrouter_model_id,
 } from "@/lib/settings/storage";
-import { add_version, ensure_version_history, get_effective_scene_code, type SavedScene } from "@/lib/scene/store";
+import { log_scene_generated } from "@/lib/settings/scene-log";
+import { add_version, ensure_version_history, get_scene_code as get_scene_code_from_store, type SavedScene } from "@/lib/scene/store";
 
 import type { ChatMessage, ChatThreadId } from "@/lib/chat/types";
-import { get_scene_code, parse_model_output } from "@/lib/chat/parse";
+import { parse_model_output } from "@/lib/chat/parse";
 import { validate_scene_code, validate_llm_response } from "@/lib/scene/validation";
 import {
   show_error,
@@ -47,7 +48,7 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
   const core_prompts = `${system_prompt}\n\n---\n\n${api_prompt}`;
 
   // 2. System: scene.md (fresh, if scene exists) - use current version's code
-  const effective_scene_code = get_effective_scene_code(options.scene);
+  const effective_scene_code = get_scene_code_from_store(options.scene);
   const has_scene_code =
     effective_scene_code && effective_scene_code.trim().length > 0;
   let scene_context: string | null = null;
@@ -129,7 +130,7 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
       thread_id: options.thread_id,
       user_message: options.user_text,
       error_message:
-        "Response must be JSON format. Include scene code as a JSON string field 'scene'. Camera is optional.",
+        "Response must contain scene code in a code block. Use ```javascript ``` to wrap your scene code.",
       invalid_json: raw,
       scene: options.scene,
       mode: options.mode,
@@ -138,32 +139,21 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
     show_error(config.message, {
       title: config.title,
       actions: config.actions,
+    });
+    log_scene_generated({
+      scene_id: options.scene.id,
+      llm_model: model_id,
+      llm_response: {},
+      success: false,
+      error: JSON.stringify([{ type: "syntax", message: "Response must be JS format" }]),
     });
     return;
   }
 
-  const scene_code = get_scene_code(parsed.payload);
-  if (!scene_code) {
-    const error_msg =
-      "JSON missing required 'scene' field. Include 'scene' as a string containing scene.add*() method calls.";
-    prepare_error_context({
-      thread_id: options.thread_id,
-      user_message: options.user_text,
-      error_message: error_msg,
-      invalid_json: raw,
-      scene: options.scene,
-      mode: options.mode,
-    });
-    const config = BANNERS.INVALID_SCENE_CODE;
-    show_error(config.message, {
-      title: config.title,
-      actions: config.actions,
-    });
-    return;
-  }
+  const scene_code = parsed.code;
 
   // Stage 1: Validate LLM response structure and content
-  const llm_validation = validate_llm_response(parsed.payload);
+  const llm_validation = validate_llm_response(scene_code);
   if (!llm_validation.ok) {
     const error_msg = llm_validation.errors.length > 0 
       ? llm_validation.errors.map(e => e.message).join("; ")
@@ -180,6 +170,13 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
     show_error(config.message, {
       title: config.title,
       actions: config.actions,
+    });
+    log_scene_generated({
+      scene_id: options.scene.id,
+      llm_model: model_id,
+      llm_response: { code: scene_code },
+      success: false,
+      error: JSON.stringify(llm_validation.errors),
     });
     return;
   }
@@ -203,6 +200,13 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
       title: config.title,
       actions: config.actions,
     });
+    log_scene_generated({
+      scene_id: options.scene.id,
+      llm_model: model_id,
+      llm_response: { code: scene_code },
+      success: false,
+      error: JSON.stringify(validation.errors),
+    });
     return;
   }
 
@@ -222,6 +226,13 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
 
   // Add new version from LLM response
   add_version(scene_with_versions, options.user_text, scene_code);
+
+  log_scene_generated({
+    scene_id: scene_with_versions.id,
+    llm_model: model_id,
+    llm_response: { code: scene_code },
+    success: true,
+  });
 
   window.dispatchEvent(
     new CustomEvent("stemify:scenes-changed", {

@@ -10,18 +10,17 @@ export type AxesConfig = {
   x?: AxisRange;
   y?: AxisRange;
   z?: AxisRange;
-  length?: number;
   position?: Vec3;
 };
 
 export function create_axes_group(config: AxesConfig = {}): THREE.Group {
-  const length = config.length ?? 5;
   const position = config.position ?? [0, 0, 0];
 
   const group = new THREE.Group();
   group.position.copy(v3(position));
 
-  const axis_radius = Math.max(0.01, length * 0.008);
+  const default_length = 5;
+  const axis_radius = Math.max(0.01, default_length * 0.008);
   const head_radius = axis_radius * 2.2;
   const head_length = axis_radius * 6.0;
 

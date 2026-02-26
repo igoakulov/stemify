@@ -14,12 +14,14 @@ export function build_openrouter_headers(api_key: string): Headers {
 
   // Optional but recommended by OpenRouter:
   // https://openrouter.ai/docs/api/reference/authentication
-  headers.set("X-Title", "STEMify");
+  headers.set("X-Title", "Stemify");
 
   return headers;
 }
 
-export async function list_openrouter_models(api_key: string): Promise<OpenRouterModel[]> {
+export async function list_openrouter_models(
+  api_key: string,
+): Promise<OpenRouterModel[]> {
   const res = await fetch(`${OPENROUTER_BASE_URL}/models`, {
     method: "GET",
     headers: build_openrouter_headers(api_key),

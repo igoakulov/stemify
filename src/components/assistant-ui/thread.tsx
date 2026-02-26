@@ -302,12 +302,12 @@ const ModeToggle: FC<{
   };
 
   const getSubmitButtonStyles = () => {
-    const base = "h-8 min-w-8 gap-2 px-3 text-xs font-semibold uppercase tracking-wide border-0 shrink-0 justify-between cursor-pointer rounded-lg";
+    const base = "h-8 min-w-8 gap-2 px-3 text-xs font-semibold uppercase tracking-wide border-2 shrink-0 justify-between cursor-pointer rounded-lg";
 
     if (mode === "ask") {
-      return `${base} bg-transparent text-amber-400 border-2 border-amber-400`;
+      return `${base} bg-transparent text-amber-400 border-amber-400 hover:bg-amber-400/10`;
     }
-    return `${base} bg-amber-400 text-black border-2 border-amber-400`;
+    return `${base} bg-amber-400 text-black border-amber-400 hover:bg-amber-500`;
   };
 
   const getCancelButtonStyles = () => {

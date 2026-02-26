@@ -31,7 +31,6 @@ export function SceneCodeEditor({
   const monacoRef = useRef<Monaco | null>(null);
   const [mounted, setMounted] = useState(false);
   const prevValueRef = useRef(value);
-  const isFocusedRef = useRef(false);
 
   const handle_mount: OnMount = useCallback(
     (editor, monaco) => {
@@ -110,16 +109,13 @@ export function SceneCodeEditor({
         },
       });
 
-      // Wire up focus/blur handlers
       if (onFocus) {
         editor.onDidFocusEditorWidget(() => {
-          isFocusedRef.current = true;
           onFocus();
         });
       }
       if (onBlur) {
         editor.onDidBlurEditorWidget(() => {
-          isFocusedRef.current = false;
           onBlur();
         });
       }
@@ -211,27 +207,8 @@ export function SceneCodeEditor({
     if (!mounted || !editorRef.current) return;
     if (value === prevValueRef.current) return;
 
-    const editor = editorRef.current;
-    
-    // Only restore view state if editor is focused (user is actively editing)
-    // This preserves cursor/scroll when external code is applied
-    if (isFocusedRef.current) {
-      const viewState = editor.saveViewState();
-      
-      // Use setTimeout to ensure Monaco has processed the value change first
-      const timeoutId = setTimeout(() => {
-        if (viewState && editorRef.current) {
-          editorRef.current.restoreViewState(viewState);
-        }
-      }, 0);
-      
-      prevValueRef.current = value;
-      
-      return () => clearTimeout(timeoutId);
-    } else {
-      // Not focused - just update the ref, don't need to restore
-      prevValueRef.current = value;
-    }
+    // Update ref to track current value - Monaco handles cursor/scroll naturally
+    prevValueRef.current = value;
   }, [value, mounted]);
 
   return (

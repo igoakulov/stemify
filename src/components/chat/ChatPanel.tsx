@@ -23,7 +23,6 @@ import { Button } from "@/components/ui/button";
 import type { SavedScene } from "@/lib/scene/store";
 import {
   get_thread,
-  set_thread_title,
   get_current_abort_controller,
   set_current_abort_controller,
 } from "@/lib/chat/store";
@@ -98,10 +97,8 @@ export function ChatPanel(props: ChatPanelProps) {
   const [chat_hovered, set_chat_hovered] = useState(false);
 
   const current_title = useCallback(() => {
-    if (!thread_id) return "Untitled";
-    const thread = get_thread(thread_id);
-    return thread.title ?? props.active_scene?.title ?? "Untitled";
-  }, [props.active_scene?.title, thread_id]);
+    return props.active_scene?.title ?? "Untitled";
+  }, [props.active_scene?.title]);
 
   const [display_title, set_display_title] = useState("");
 
@@ -111,32 +108,33 @@ export function ChatPanel(props: ChatPanelProps) {
     set_edit_title_value(title);
   }, [current_title, thread_id]);
 
+  // Reset edit state when switching scenes
+  useEffect(() => {
+    set_is_editing_title(false);
+  }, [props.active_scene?.id]);
+
   const on_first_assistant_response = useCallback(
     async (options: {
       thread_id: string;
       first_user_message: string;
       scene: SavedScene;
     }) => {
-      const current = get_thread(options.thread_id);
-      if (current.title) return;
+      // Don't overwrite if scene already has a title (user-edited or previous auto-generation)
+      if (options.scene.title && options.scene.title !== "Untitled") return;
 
       try {
         const title = await generate_title(options.first_user_message);
-        const recheck = get_thread(options.thread_id);
-        if (!recheck.title) {
-          set_thread_title(options.thread_id, title);
-          set_display_title(title);
-          upsert_scene({
-            ...options.scene,
-            title: title,
-            updatedAt: Date.now(),
-          });
-          window.dispatchEvent(
-            new CustomEvent("stemify:scenes-changed", {
-              detail: { activeId: options.scene.id },
-            }),
-          );
-        }
+        set_display_title(title);
+        upsert_scene({
+          ...options.scene,
+          title: title,
+          updatedAt: Date.now(),
+        });
+        window.dispatchEvent(
+          new CustomEvent("stemify:scenes-changed", {
+            detail: { activeId: options.scene.id },
+          }),
+        );
       } catch {}
     },
     [],
@@ -153,7 +151,6 @@ export function ChatPanel(props: ChatPanelProps) {
       title: "Untitled",
       createdAt: now,
       updatedAt: now,
-      sceneCode: "",
       currentVersionId: null,
       versions: [],
     };
@@ -233,10 +230,8 @@ export function ChatPanel(props: ChatPanelProps) {
     if (
       trimmed &&
       trimmed !== display_title &&
-      props.active_scene &&
-      thread_id
+      props.active_scene
     ) {
-      set_thread_title(thread_id, trimmed);
       set_display_title(trimmed);
       upsert_scene({
         ...props.active_scene,
@@ -250,7 +245,7 @@ export function ChatPanel(props: ChatPanelProps) {
       );
     }
     set_is_editing_title(false);
-  }, [edit_title_value, display_title, thread_id, props.active_scene]);
+  }, [edit_title_value, display_title, props.active_scene]);
 
   if (props.headerOnly) {
     return (

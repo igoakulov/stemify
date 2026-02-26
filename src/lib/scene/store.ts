@@ -22,7 +22,6 @@ export type SavedScene = {
   title: string;
   createdAt: number;
   updatedAt: number;
-  sceneCode: string;
   currentVersionId: string | null;
   versions: SceneVersion[];
   camera?: CameraState;
@@ -49,8 +48,7 @@ export function load_saved_scenes(): SavedScene[] {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
 
-    const scenes = parsed as SavedScene[];
-    return scenes.map((scene) => ensure_version_history(scene));
+    return parsed as SavedScene[];
   } catch {
     return [];
   }
@@ -114,37 +112,25 @@ export function update_scene_grid(
   return upsert_scene(updated_scene);
 }
 
-function make_version_id(): string {
+export function make_version_id(): string {
   const now = Date.now();
   const random = Math.random().toString(36).slice(2, 6);
   return `ver_${now}_${random}`;
 }
 
 export function ensure_version_history(scene: SavedScene): SavedScene {
+  if (scene.versions && scene.versions.length > 0 && scene.currentVersionId) {
+    return scene;
+  }
+
   if (scene.versions && scene.versions.length > 0) {
-    return scene;
+    return {
+      ...scene,
+      currentVersionId: scene.versions[0].id,
+    };
   }
 
-  if (!scene.sceneCode || !scene.sceneCode.trim()) {
-    return scene;
-  }
-
-  const version: SceneVersion = {
-    id: make_version_id(),
-    sceneId: scene.id,
-    createdAt: scene.createdAt || Date.now(),
-    description: "Initial version",
-    sceneCode: scene.sceneCode,
-    userEditCount: 0,
-  };
-
-  const updated: SavedScene = {
-    ...scene,
-    versions: [version],
-    currentVersionId: version.id,
-  };
-
-  return upsert_scene(updated)[0] ?? updated;
+  return scene;
 }
 
 export function add_version(
@@ -165,7 +151,6 @@ export function add_version(
     ...scene,
     versions: [version, ...(scene.versions ?? [])],
     currentVersionId: version.id,
-    sceneCode,
     updatedAt: Date.now(),
   };
 
@@ -201,7 +186,6 @@ export function set_current_version(
   const updated: SavedScene = {
     ...scene,
     currentVersionId: versionId,
-    sceneCode: version.sceneCode,
     updatedAt: Date.now(),
   };
 
@@ -229,22 +213,39 @@ export function increment_user_edit_count(scene: SavedScene): SavedScene {
   return upsert_scene(updated)[0] ?? updated;
 }
 
-export function get_effective_scene_code(scene: SavedScene): string {
+export function get_scene_code(scene: SavedScene): string {
   if (scene.currentVersionId) {
     const version = (scene.versions ?? []).find((v) => v.id === scene.currentVersionId);
     if (version) {
       return version.sceneCode;
     }
   }
-  return scene.sceneCode;
+  if (scene.versions && scene.versions.length > 0) {
+    return scene.versions[0].sceneCode;
+  }
+  return "";
 }
 
 export function update_current_version_code(scene: SavedScene, code: string): SavedScene {
-  if (!scene.currentVersionId || !scene.versions || scene.versions.length === 0) {
-    return scene;
+  if (!scene.versions || scene.versions.length === 0) {
+    const version: SceneVersion = {
+      id: make_version_id(),
+      sceneId: scene.id,
+      createdAt: Date.now(),
+      description: "Initial version",
+      sceneCode: code,
+      userEditCount: 0,
+    };
+    const updated: SavedScene = {
+      ...scene,
+      versions: [version],
+      currentVersionId: version.id,
+      updatedAt: Date.now(),
+    };
+    return upsert_scene(updated)[0] ?? updated;
   }
 
-  const currentVid = scene.currentVersionId;
+  const currentVid = scene.currentVersionId ?? scene.versions[0].id;
   
   const updatedVersions = scene.versions.map((v) => {
     if (v.id === currentVid) {
@@ -257,7 +258,6 @@ export function update_current_version_code(scene: SavedScene, code: string): Sa
     ...scene,
     versions: updatedVersions,
     currentVersionId: currentVid,
-    sceneCode: code,
     updatedAt: Date.now(),
   };
 

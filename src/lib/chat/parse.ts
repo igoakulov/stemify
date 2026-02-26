@@ -1,37 +1,24 @@
-export type ParsedScenePayload = {
-  scene?: unknown;
-  camera?: unknown;
-};
-
 export type ParseResult =
   | {
-      kind: "json";
-      payload: ParsedScenePayload;
+      kind: "scene";
+      code: string;
     }
   | {
       kind: "text";
       text: string;
     };
 
-function extract_json_from_markdown(raw: string): string | null {
-  // Look for JSON inside markdown code blocks
-  const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)\s*```/g;
+function extract_js_from_markdown(raw: string): string | null {
+  const codeBlockRegex = /```(?:javascript|js)?\s*([\s\S]*?)\s*```/g;
   let match;
-  
+  let lastContent = null;
+
   while ((match = codeBlockRegex.exec(raw)) !== null) {
-    const content = match[1].trim();
-    // Check if content looks like JSON
-    if (content.startsWith("{") && content.endsWith("}")) {
-      try {
-        // Validate it's valid JSON
-        JSON.parse(content);
-        return content;
-      } catch {
-        // Not valid JSON, continue searching
-      }
-    }
+    lastContent = match[1].trim();
   }
-  
+
+  if (lastContent) return lastContent;
+
   return null;
 }
 
@@ -39,53 +26,22 @@ export function parse_model_output(raw: string, mode?: "ask" | "build" | "fix"):
   const trimmed = raw.trim();
   if (!trimmed) return { kind: "text", text: "" };
 
-  // In BUILD mode, first try to extract JSON from markdown code blocks
-  if (mode === "build") {
-    const jsonFromMarkdown = extract_json_from_markdown(raw);
-    if (jsonFromMarkdown) {
-      try {
-        return {
-          kind: "json",
-          payload: JSON.parse(jsonFromMarkdown) as ParsedScenePayload,
-        };
-      } catch {
-        // fall through to normal parsing
-      }
-    }
-  }
-
-  // Fast path: starts like JSON
-  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-    try {
+  if (mode === "build" || mode === "fix") {
+    const jsFromMarkdown = extract_js_from_markdown(trimmed);
+    if (jsFromMarkdown) {
       return {
-        kind: "json",
-        payload: JSON.parse(trimmed) as ParsedScenePayload,
+        kind: "scene",
+        code: jsFromMarkdown,
       };
-    } catch {
-      // fall through
-    }
-  }
-
-  // Fallback: attempt to extract the first JSON object substring.
-  const first = trimmed.indexOf("{");
-  const last = trimmed.lastIndexOf("}");
-  if (first >= 0 && last > first) {
-    const candidate = trimmed.slice(first, last + 1);
-    try {
-      return {
-        kind: "json",
-        payload: JSON.parse(candidate) as ParsedScenePayload,
-      };
-    } catch {
-      // ignore
     }
   }
 
   return { kind: "text", text: raw };
 }
 
-export function get_scene_code(payload: ParsedScenePayload): string | null {
-  const code = payload.scene;
+export function get_scene_code(result: ParseResult): string | null {
+  if (result.kind !== "scene") return null;
+  const code = result.code;
   if (typeof code !== "string") return null;
   const trimmed = code.trim();
   return trimmed.length > 0 ? trimmed : null;

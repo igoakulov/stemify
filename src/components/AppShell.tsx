@@ -18,10 +18,11 @@ import {
   set_active_scene_id,
   clear_active_scene_id,
   type SavedScene,
-  ensure_version_history,
+  SceneVersion,
   update_current_version_code,
-  get_effective_scene_code,
+  get_scene_code,
   increment_user_edit_count,
+  make_version_id,
 } from "@/lib/scene/store";
 import { get_current_abort_controller, set_current_abort_controller } from "@/lib/chat/store";
 import { useSceneSelection } from "@/lib/scene/use_scene_selection";
@@ -136,7 +137,7 @@ export function AppShell() {
     const still_exists = scenes.find((s) => s.id === active_id) ?? null;
     active_scene_id_ref.current = still_exists?.id ?? null;
     set_active_scene(still_exists);
-    setSceneCode(still_exists ? get_effective_scene_code(still_exists) : "");
+    setSceneCode(still_exists ? get_scene_code(still_exists) : "");
   }, []);
 
   useEffect(() => {
@@ -150,7 +151,7 @@ export function AppShell() {
       if (previous_active) {
         active_scene_id_ref.current = previous_active.id;
         set_active_scene(previous_active);
-        setSceneCode(previous_active.sceneCode ?? "");
+        setSceneCode(get_scene_code(previous_active));
       }
     });
 
@@ -183,7 +184,7 @@ export function AppShell() {
       } else {
         active_scene_id_ref.current = scene.id;
         set_active_scene(scene);
-        setSceneCode(scene.sceneCode ?? "");
+        setSceneCode(get_scene_code(scene));
         set_active_scene_id(scene.id);
         clear_banner();
       }
@@ -217,16 +218,23 @@ export function AppShell() {
     } else if (code.trim()) {
       // Create new scene in null state when user types valid code
       const now = Date.now();
-      let new_scene: SavedScene = {
-        id: `scene_${now}`,
+      const scene_id = `scene_${now}`;
+      const version: SceneVersion = {
+        id: make_version_id(),
+        sceneId: scene_id,
+        createdAt: now,
+        description: "Initial version",
+        sceneCode: code,
+        userEditCount: 0,
+      };
+      const new_scene: SavedScene = {
+        id: scene_id,
         title: "Untitled",
         createdAt: now,
         updatedAt: now,
-        sceneCode: code,
-        currentVersionId: null,
-        versions: [],
+        currentVersionId: version.id,
+        versions: [version],
       };
-      new_scene = ensure_version_history(new_scene);
       const scenes = load_saved_scenes();
       save_saved_scenes([new_scene, ...scenes]);
       set_active_scene_id(new_scene.id);
@@ -273,7 +281,7 @@ export function AppShell() {
               <div className="relative flex-1 min-h-0">
                   <SceneViewport 
                     key={active_scene?.id} 
-                    sceneCode={active_scene ? get_effective_scene_code(active_scene) : ""} 
+                    sceneCode={(console.log("[DEBUG] AppShell passing sceneCode to SceneViewport, length:", (active_scene ? get_scene_code(active_scene) : "")?.length, "has stretch:", (active_scene ? get_scene_code(active_scene) : "")?.includes("stretch")), active_scene ? get_scene_code(active_scene) : "")} 
                     sceneId={active_scene?.id ?? ""}
                     gridSnap={grid_snap ?? true}
                     cameraMode={camera_mode}

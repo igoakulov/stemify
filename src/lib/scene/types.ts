@@ -1,75 +1,88 @@
 import type * as THREE from "three";
 
 export type Vec3 = number[];
+export type Vec2 = number[];
 
 export type ObjectMeta = {
   id: string;
   type: string;
 };
 
+export type AddPoly2DConfig = {
+  id: string;
+  points: Vec2[];
+  offset?: Vec3;
+  position?: Vec3;
+  color?: string;
+  opacity?: number;
+  lookat?: Vec3;
+  spin?: number;
+  selectable?: boolean;
+};
+
 export type AddPointConfig = {
   id: string;
-  center?: Vec3;
-  shift?: Vec3;
+  position?: Vec3;
+  offset?: Vec3;
   color?: string;
   selectable?: boolean;
 };
 
 export type AddLineConfig = {
   id: string;
-  points: Vec3[] | {
-    x: string;
-    y: string;
-    z: string;
-    tMin: number;
-    tMax: number;
-    tSteps: number;
-  };
+  points: Vec3[];
+  tension?: number;
+  lookat?: Vec3;
+  spin?: number;
   thickness?: number;
   arrow?: "none" | "start" | "end" | "both";
-  direction?: Vec3;
-  rotation?: number;
-  shift?: Vec3;
+  offset?: Vec3;
   color?: string;
-  opacity?: number;
   selectable?: boolean;
 };
 
-export type AddPoly2DConfig = {
+export type AddCurveConfig = {
   id: string;
-  points: Vec3[];
-  shift?: Vec3;
+  steps?: number;
+  tMin: number;
+  tMax: number;
+  x: string | number;
+  y: string | number;
+  z: string | number;
+  lookat?: Vec3;
+  spin?: number;
+  thickness?: number;
+  arrow?: "none" | "start" | "end" | "both";
+  offset?: Vec3;
   color?: string;
-  opacity?: number;
-  direction?: Vec3;
-  rotation?: number;
   selectable?: boolean;
 };
 
 export type AddCircleConfig = {
   id: string;
-  center?: Vec3;
-  shift?: Vec3;
-  radius: number;
-  direction?: Vec3;
+  position?: Vec3;
+  offset?: Vec3;
+  radius?: number;
+  lookat?: Vec3;
   stretch?: Vec3;
   anglecut?: [number, number] | number;
-  rotation?: number;
+  spin?: number;
   color?: string;
   opacity?: number;
+  outline?: number;
   selectable?: boolean;
 };
 
 export type AddSphereConfig = {
   id: string;
-  center?: Vec3;
-  shift?: Vec3;
+  position?: Vec3;
+  offset?: Vec3;
   radius: number;
   stretch?: Vec3;
   anglecut?: [number, number] | number;
   flatcut?: [number, number] | number;
-  direction?: Vec3;
-  rotation?: number;
+  lookat?: Vec3;
+  spin?: number;
   color?: string;
   opacity?: number;
   selectable?: boolean;
@@ -77,12 +90,13 @@ export type AddSphereConfig = {
 
 export type AddCylinderConfig = {
   id: string;
-  points: Vec3[];
-  shift?: Vec3;
-  radius: number[];
+  position: Vec3;
+  height?: number[] | number;
+  radius?: number[];
+  offset?: Vec3;
   anglecut?: [number, number] | number;
-  direction?: Vec3;
-  rotation?: number;
+  spin?: number;
+  lookat?: Vec3;
   color?: string;
   opacity?: number;
   selectable?: boolean;
@@ -91,23 +105,23 @@ export type AddCylinderConfig = {
 export type AddPoly3DConfig = {
   id: string;
   points: Vec3[];
-  shift?: Vec3;
+  offset?: Vec3;
   color?: string;
   opacity?: number;
-  direction?: Vec3;
-  rotation?: number;
+  lookat?: Vec3;
+  spin?: number;
   selectable?: boolean;
 };
 
 export type AddDonutConfig = {
   id: string;
-  center?: Vec3;
-  shift?: Vec3;
+  position?: Vec3;
+  offset?: Vec3;
   radius: number;
   thickness: number;
-  direction?: Vec3;
+  lookat?: Vec3;
   anglecut?: [number, number] | number;
-  rotation?: number;
+  spin?: number;
   color?: string;
   opacity?: number;
   selectable?: boolean;
@@ -137,9 +151,9 @@ export type AddLabelConfig = {
 export type AddGroupConfig = {
   id: string;
   children: string[];
-  direction?: Vec3;
-  rotation?: number;
-  shift?: Vec3;
+  lookat?: Vec3;
+  spin?: number;
+  offset?: Vec3;
   selectable?: boolean;
 };
 
@@ -151,11 +165,11 @@ export type AddAnimationConfig = {
 export type AddCustomMeshConfig = {
   id: string;
   createFn: string;
-  center?: Vec3;
-  shift?: Vec3;
+  position?: Vec3;
+  offset?: Vec3;
   color?: string;
-  direction?: Vec3;
-  rotation?: number;
+  lookat?: Vec3;
+  spin?: number;
   selectable?: boolean;
 };
 
@@ -165,25 +179,32 @@ export type AddTooltipConfig = {
   properties?: Array<{ label: string; value: string }>;
 };
 
+export type SetCameraConfig = {
+  position?: Vec3;
+  lookat?: Vec3;
+};
+
 export type SceneApi = {
-  addPoint: (config: AddPointConfig) => void;
-  addLine: (config: AddLineConfig) => void;
-  addPoly2D: (config: AddPoly2DConfig) => void;
-  addCircle: (config: AddCircleConfig) => void;
+  point: (config: AddPointConfig) => void;
+  line: (config: AddLineConfig) => void;
+  curve: (config: AddCurveConfig) => void;
+  poly2: (config: AddPoly2DConfig) => void;
+  circle: (config: AddCircleConfig) => void;
 
-  addSphere: (config: AddSphereConfig) => void;
-  addCylinder: (config: AddCylinderConfig) => void;
-  addPoly3D: (config: AddPoly3DConfig) => void;
-  addDonut: (config: AddDonutConfig) => void;
+  sphere: (config: AddSphereConfig) => void;
+  cylinder: (config: AddCylinderConfig) => void;
+  poly3: (config: AddPoly3DConfig) => void;
+  donut: (config: AddDonutConfig) => void;
 
-  addAxes: (config?: AddAxesConfig) => void;
-  addLabel: (config: AddLabelConfig) => void;
-  addGroup: (config: AddGroupConfig) => void;
-  addAnimation: (config: AddAnimationConfig) => void;
-  addCustomMesh: (config: AddCustomMeshConfig) => void;
-  addTooltip: (config: AddTooltipConfig) => void;
-  setGrid: (size: number) => void;
-  setSmoothness: (segments: number) => void;
+  axes: (config?: AddAxesConfig) => void;
+  label: (config: AddLabelConfig) => void;
+  group: (config: AddGroupConfig) => void;
+  animation: (config: AddAnimationConfig) => void;
+  mesh: (config: AddCustomMeshConfig) => void;
+  tooltip: (config: AddTooltipConfig) => void;
+  grid: (size: number) => void;
+  smoothness: (segments: number) => void;
+  camera: (config: SetCameraConfig) => void;
 
   getObject: (id: string) => THREE.Object3D | undefined;
   listObjects: () => ObjectMeta[];

@@ -99,11 +99,6 @@ export function replace_message(
   set_thread(thread_id, { ...state, messages: next_messages });
 }
 
-export function set_thread_title(thread_id: ChatThreadId, title: string): void {
-  const state = get_thread(thread_id);
-  set_thread(thread_id, { ...state, title });
-}
-
 export function remove_thread(thread_id: ChatThreadId): void {
   threads.delete(thread_id);
   delete_chat(thread_id);

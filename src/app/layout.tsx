@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "STEMify",
+  title: "Stemify",
   description: "Interactive STEM visualizations powered by LLMs",
 };
 
@@ -24,8 +24,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`} style={{ backgroundColor: "oklch(0.141 0.005 285.823)" }}>
-      <body className="antialiased" style={{ backgroundColor: "oklch(0.141 0.005 285.823)" }}>
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${geistMono.variable}`}
+      style={{ backgroundColor: "oklch(0.141 0.005 285.823)" }}
+    >
+      <body
+        className="antialiased"
+        style={{ backgroundColor: "oklch(0.141 0.005 285.823)" }}
+      >
         {children}
       </body>
     </html>

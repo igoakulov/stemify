@@ -2,6 +2,8 @@
 
 Stemify: learn (or teach) STEM visually with interactive scenes and AI. Generate scenes to explore subjects, concepts and problems. Edit objects, experiment, and ask anything you want. Bring your OpenRouter API key.
 
+[Download for macOS / Windows](https://github.com/igoakulov/stemify/releases)
+
 ![Stemify screenshot](public/stemify.png)
 
 ## Features
@@ -39,6 +41,10 @@ This includes your API key, scenes and versions, conversations, and settings.
 - **Styling**: Tailwind CSS v4 + shadcn/ui for general, assistant-ui for chat
 - **AI Integration**: OpenRouter
 - **State Management**: Zustand for local state, assistant-ui for chat
+
+## Feedback
+
+Questions? Suggestions? [Start a discussion](https://github.com/igoakulov/stemify/discussions/1) or reach out on X:[@igoakulov](https://x.com/igoakulov).
 
 ## License
 

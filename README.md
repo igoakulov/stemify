@@ -1,45 +1,44 @@
-# STEMify
+# Stemify
 
-STEMify is a local-first web application that transforms natural language descriptions into interactive, editable 3D visualizations. Built for STEM education, exploration, and prototyping.
+Stemify: learn (or teach) STEM visually with interactive scenes and AI. Generate scenes to explore subjects, concepts and problems. Edit objects, experiment, and ask anything you want. Bring your OpenRouter API key.
 
-## What It Does
+![Stemify screenshot](public/stemify.png)
 
-- **Natural Language to 3D**: Describe physics simulations, mathematical concepts, or geometric shapes in plain English, and watch them come to life as interactive 3D scenes
-- **Conversational Editing**: Chat with an AI assistant to modify, extend, or explain your visualizations
-- **Redo**: 1-click redo of the scene if LLM returns invalid code
-- **Dual Mode Interface**:
-  - **Ask Mode**: Get explanations and insights about your scenes
-  - **Build Mode**: Direct the AI to modify and create new visualizations
-- **Interactive Scene Editor**: Click, drag, and manipulate objects directly in the 3D viewport
-- **Local-First**: All data stored locally in your browser—no cloud dependency
+## Features
+
+- **Two Chat Modes**:
+  - **BUILD** - Create or update your 3D scene with natural language
+  - **ASK** - Get explanations, walkthroughs, and insights (general or scene-specific)
+- **Full control, simple code**: Edit the scene or individual shapes yourself, directly in code (friendly library of shapes, autocomplete and automatic versioning)
+- **Rotate Or Fly**: Choose to rotate camera around center of the scene or freely fly all around (speed, reset)
+- **Convenience**: Hotkeys for everything, recent scenes, autocomplete and build-in documentation, self-troubleshooting
+- **Local-First**: Runs and stores data (only) on your device
+- **Full History**: All settings, sscenes, versions, conversations, backup
+- **Assistant Customization**: Choose ANY model (some are free), customize instructions and preferences in all system prompts
+
+## Data Storage
+
+All data is stored locally on your device. No data is sent to any server except OpenRouter for AI requests.
+
+### Desktop App
+
+Data is stored in the system application support folder:
+
+| Platform | Location |
+|----------|----------|
+| **macOS** | `~/Library/Application Support/stemify/` |
+| **Windows** | `%APPDATA%/stemify/` |
+| **Linux** | `~/.config/stemify/` |
+
+This includes your API key, scenes and versions, conversations, and settings.
 
 ## Tech Stack
 
 - **Framework**: Next.js 16 (App Router) + React 19 + TypeScript 5
 - **3D Rendering**: Three.js with React Three Fiber
-- **Styling**: Tailwind CSS v4 + shadcn/ui components
-- **AI Integration**: OpenRouter API (Claude, GPT, and other LLMs)
+- **Styling**: Tailwind CSS v4 + shadcn/ui for general, assistant-ui for chat
+- **AI Integration**: OpenRouter
 - **State Management**: Zustand for local state, assistant-ui for chat
-
-## Key Features
-
-### Chat Interface
-- Message history with metadata (mode, model, timestamp)
-- Context-aware prompts based on current scene state
-- Support for multiple AI models via OpenRouter
-- Keyboard shortcuts
-
-### Scene Interaction
-- Two control schemes: Rotate & Fly
-- Inpect and edit object parameters
-- Scene history and versioning
-- Keyboard shortcuts
-
-### Customization
-- Customizable system prompts for AI behavior
-- Model selection (Claude, GPT-4, etc.)
-- BYOK (OpenRouter)
-- Persistent settings across sessions
 
 ## License
 

@@ -6,9 +6,9 @@ Your previous response had validation errors.
 
 {{errors}}
 
-## Invalid JSON
+## Invalid scene JavaScript
 
-{{invalid_json}}
+{{invalid_javascript}}
 
 - Output code block BEFORE ANYTHING else. Do NOT output additional code blocks.
 - Output EXACTLY ONE code block with the corrected scene JavaScript. NO additional code blocks.

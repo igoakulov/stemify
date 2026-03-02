@@ -73,13 +73,13 @@ export const Thread: FC<ThreadProps> = ({ show_recent_scenes, thread_id }) => {
               EditComposer,
             }}
           />
-        </ThreadPrimitive.Viewport>
 
-        {show_recent_scenes && (
-          <div className="w-full max-w-2xl mx-auto p-4">
-            <RecentScenes />
-          </div>
-        )}
+          {show_recent_scenes && (
+            <div className="mt-auto pt-4">
+              <RecentScenes />
+            </div>
+          )}
+        </ThreadPrimitive.Viewport>
 
         <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto flex w-full max-w-2xl flex-col gap-4 overflow-visible rounded-t-3xl bg-(--main-black)/90 px-4 pb-4 pt-2 backdrop-blur">
           <ThreadScrollToBottom viewportRef={viewport_ref} thread_id={thread_id} />

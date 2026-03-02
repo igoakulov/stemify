@@ -1,4 +1,4 @@
-# Agent Guidelines for STEMify
+# Agent Guidelines for Stemify
 
 This is a Next.js 16 + React 19 + TypeScript 5 application using Tailwind CSS 4 and shadcn/ui components.
 

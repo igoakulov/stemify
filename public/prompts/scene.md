@@ -1,13 +1,8 @@
-# SCENE
+# CURRENT SCENE
 
-Below is the current (most recent) valid version of the scene.
+User keeps different versions of the scene from chat history or his own edits that you don't see. Below is the CURRENT version of the scene that the user is working with:
 
 {{sceneCode}}
-
-It represents:
-- Single 100% reliable source of truth for what exists now - trust it over conversation history.
-- What user sees on their screen now.
-- What user will refer to in their next message, unless they specify otherwise.
 
 In BUILD mode, update this code based on user's request.
 In ASK mode, interpret this code to answer user's questions about the scene.

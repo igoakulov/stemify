@@ -74,7 +74,7 @@ export function clear_error_context(): void {
 
 export function create_retry_action(): BannerAction {
   return {
-    label: "Redo",
+    label: "Fix",
     onClick: () => {
       window.dispatchEvent(new CustomEvent("stemify:retry-failed"));
     },
@@ -179,7 +179,7 @@ export const BANNERS: {
 
   INVALID_SCENE_CODE: {
     message:
-      "Assistant's scene code has an issue. Click redo or try a new prompt.",
+      "Assistant's scene code has an issue. Ask him to Fix or Edit your message.",
     title: "Scene Code Issue",
     actions: [create_retry_action()],
   },
@@ -192,7 +192,7 @@ export const BANNERS: {
   WELCOME_SETUP: {
     message: (
       <>
-        To start chatting, add your{" "}
+        To start, add your{" "}
         <a
           href="https://openrouter.ai"
           target="_blank"
@@ -201,11 +201,10 @@ export const BANNERS: {
         >
           OpenRouter
         </a>{" "}
-        API key. It is stored locally in your browser and never leaves your
-        device.
+        API key. It is stored locally and never leaves your device.
       </>
     ),
-    title: "Welcome! Let's get you set up",
+    title: "Welcome! Let's set up.",
     actions: [
       {
         label: "Add API key",

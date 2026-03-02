@@ -23,6 +23,7 @@ import { SCENE_ROOT_ID } from "@/lib/scene/constants";
 
 type ObjectRange = {
   id: string;
+  method: string;
   startLine: number;
   endLine: number;
 };
@@ -30,6 +31,8 @@ type ObjectRange = {
 type SceneEditorPanelProps = {
   className?: string;
   sceneId?: string;
+  currentVersionId?: string | null;
+  versionCount?: number;
   fullSceneCode: string;
   selectedObjectId: string | null;
   breadcrumbs: string[];
@@ -49,6 +52,8 @@ const DEBOUNCE_MS = 500;
 export function SceneEditorPanel({
   className,
   sceneId,
+  currentVersionId,
+  versionCount = 0,
   fullSceneCode,
   selectedObjectId,
   breadcrumbs,
@@ -78,7 +83,7 @@ export function SceneEditorPanel({
   const errorPanelRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
-  const isValidatingRef = useRef(false);
+  const prevVersionIdRef = useRef<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
@@ -91,6 +96,15 @@ export function SceneEditorPanel({
     monacoRef.current = monaco;
   }, []);
 
+  // Listen for focus-editor events
+  useEffect(() => {
+    const handleFocusEditor = () => {
+      editorRef.current?.focus();
+    };
+    window.addEventListener("stemify:focus-editor", handleFocusEditor);
+    return () => window.removeEventListener("stemify:focus-editor", handleFocusEditor);
+  }, []);
+
   // Parse object line ranges for folding (stops at docs marker)
   const parseObjectLineRanges = useCallback((code: string): ObjectRange[] => {
     const ranges: ObjectRange[] = [];
@@ -99,9 +113,10 @@ export function SceneEditorPanel({
     const codeToParse = markerIndex === -1 ? code : code.slice(0, markerIndex);
 
     const lines = codeToParse.split("\n");
-    const methodRegex = /scene\.\w+\s*\(\s*\{/;
+    const methodRegex = /scene\.(\w+)\s*\(\s*\{/;
     
     let currentStart = -1;
+    let currentMethod: string | null = null;
     let currentId: string | null = null;
     let braceDepth = 0;
 
@@ -112,6 +127,7 @@ export function SceneEditorPanel({
         const match = line.match(methodRegex);
         if (match) {
           currentStart = lineIndex + 1; // 1-indexed
+          currentMethod = match[1];
           braceDepth = 1;
           // Try to extract id from this or following lines
           const idMatch = line.match(/id\s*:\s*["']([^"']+)["']/);
@@ -127,14 +143,16 @@ export function SceneEditorPanel({
             braceDepth--;
             if (braceDepth === 0) {
               // Found end of object
-              if (currentId) {
+              if (currentId && currentMethod) {
                 ranges.push({
                   id: currentId,
+                  method: currentMethod,
                   startLine: currentStart,
                   endLine: lineIndex + 1,
                 });
               }
               currentStart = -1;
+              currentMethod = null;
               currentId = null;
               break;
             }
@@ -187,8 +205,13 @@ export function SceneEditorPanel({
       unfold();
       
       // Then fold all except selected - this keeps nested folds intact
+      // For tooltip selection, fold everything except the tooltip's code
       setTimeout(() => {
-        foldExcept([selectedObjectId]);
+        const isTooltipSelection = selectedObjectId.startsWith("tooltip:");
+        const foldId = isTooltipSelection 
+          ? selectedObjectId.slice(8) 
+          : selectedObjectId;
+        foldExcept([foldId]);
       }, 50);
       
       // Scroll to start of selected object after fold/unfold completes
@@ -198,7 +221,15 @@ export function SceneEditorPanel({
         if (!model) return;
         
         const ranges = parseObjectLineRanges(model.getValue());
-        const selectedRange = ranges.find(r => r.id === selectedObjectId);
+        const isTooltipSelection = selectedObjectId.startsWith("tooltip:");
+        const effectiveId = isTooltipSelection 
+          ? selectedObjectId.slice(8) 
+          : selectedObjectId;
+        
+        const selectedRange = isTooltipSelection
+          ? ranges.find(r => r.id === effectiveId && r.method === "tooltip")
+          : ranges.find(r => r.id === effectiveId);
+        
         if (selectedRange) {
           const targetTop = editor.getTopForLineNumber(selectedRange.startLine);
           editor.setScrollPosition({ scrollTop: targetTop });
@@ -273,89 +304,102 @@ export function SceneEditorPanel({
     return () => window.cancelAnimationFrame(raf);
   }, [selectedObjectId, breadcrumbs, scrollBreadcrumbsToView]);
 
-  // Initialize localCode with formatted code and docs appended
+  // Initialize localCode - add docs only if no version yet (zero state)
+  // When version exists, useEffect will handle trimming and adding docs on version change
   const [localCode, setLocalCode] = useState(() => {
-    const stripped = strip_docs(fullSceneCode);
-    const formatted = format_scene_code(stripped);
-    return append_docs(formatted);
+    if (!currentVersionId) {
+      // No version yet - show docs (zero state)
+      return append_docs("");
+    }
+    // Version exists - return as-is, useEffect will add docs on version change
+    return fullSceneCode;
   });
 
-  // Track last synced code to detect external changes
-  const lastSyncedCodeRef = useRef(fullSceneCode);
-
-  // Sync when fullSceneCode changes externally (e.g., from LLM or page reload)
+// Sync when scene or version changes
+  // Triggers when switching scenes or versions - updates editor with correct code
+  // NOTE: We intentionally exclude fullSceneCode from dependencies to avoid
+  // resetting folding state when user edits code (which updates scene code in storage)
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
-    // Skip sync if this change came from user editing - validation already handled formatting
-    if (isValidatingRef.current) return;
+    const prevVersionId = prevVersionIdRef.current;
+    const currVersionId = currentVersionId ?? null;
     
-    if (fullSceneCode !== lastSyncedCodeRef.current) {
-      lastSyncedCodeRef.current = fullSceneCode;
-      
-      // Clear validation errors when scene changes
-      set_validation_error(null);
-      set_validation_errors([]);
-      
-      // Strip docs, format, then append fresh docs
-      const stripped = strip_docs(fullSceneCode);
-      const formatted = format_scene_code(stripped);
-      const codeWithDocs = append_docs(formatted);
-      
-      window.requestAnimationFrame(() => {
-        setLocalCode(codeWithDocs);
-      });
+    // Skip only if NEITHER previous nor current has a version
+    // Run for: null → non-null (first load) or non-null → non-null (version/sceneload)
+    if (!prevVersionId && !currVersionId) {
+      prevVersionIdRef.current = currVersionId;
+      return;
     }
-  }, [fullSceneCode]);
+    
+    // Clear validation errors when scene/version changes
+    set_validation_error(null);
+    set_validation_errors([]);
+    
+    // Strip existing docs, format, then append fresh docs
+    const stripped = strip_docs(fullSceneCode);
+    const formatted = format_scene_code(stripped);
+    const codeWithDocs = append_docs(formatted);
+    
+    window.requestAnimationFrame(() => {
+      // Preserve cursor position before setting new code
+      const cursorPosition = editorRef.current?.getPosition();
+      
+      // Use setValue to replace code without creating undo history
+      if (editorRef.current) {
+        editorRef.current.setValue(codeWithDocs);
+      }
+      setLocalCode(codeWithDocs);
+      
+      // Restore cursor position after setting code
+      if (cursorPosition && editorRef.current) {
+        editorRef.current.setPosition(cursorPosition);
+      }
+    });
+    
+    prevVersionIdRef.current = currVersionId;
+  }, [sceneId, currentVersionId]);
 
   const validateAndApply = useCallback(
     (code: string, isUserEdit: boolean = false) => {
-      // Track validation state to prevent sync during user edits
-      isValidatingRef.current = true;
+      // Strip docs before validation and saving
+      const rawCode = strip_docs(code);
       
-      try {
-        // Strip docs before validation and saving
-        const rawCode = strip_docs(code);
-        
-        if (!rawCode.trim()) {
-          set_validation_error(null);
-          set_validation_errors([]);
-          set_warnings([]);
-          
-          // In empty code - clear everything
-          update_scene_code_editor("");
-          update_scene_code_storage?.("");
-          onApplySceneCode?.("");
-          return;
-        }
-
-        const result = validate_scene_code(rawCode);
-        if (!result.ok) {
-          set_validation_error(result.errors.length > 0 ? result.errors[0].message : "Invalid scene code");
-          set_validation_errors(result.errors);
-          return;
-        }
-
+      if (!rawCode.trim()) {
         set_validation_error(null);
         set_validation_errors([]);
+        set_warnings([]);
         
-        // Store warnings
-        set_warnings(result.warnings);
-        
-        // Save RAW code (no docs) to storage and viewport
-        // Note: NOT updating fullSceneCode here - sync only happens on external changes (LLM, reload)
-        update_scene_code_storage?.(rawCode);
-        onApplySceneCode?.(rawCode);
-        
-        // Notify parent that user edit was applied (for version history)
-        if (isUserEdit) {
-          onUserEditApplied?.();
-        }
-        
-        // Re-inject docs for display
-        const codeWithDocs = append_docs(rawCode);
-        setLocalCode(codeWithDocs);
-      } finally {
-        isValidatingRef.current = false;
+        // In empty code - clear everything
+        update_scene_code_editor("");
+        update_scene_code_storage?.("");
+        onApplySceneCode?.("");
+        return;
       }
+
+      const result = validate_scene_code(rawCode);
+      if (!result.ok) {
+        set_validation_error(result.errors.length > 0 ? result.errors[0].message : "Invalid scene code");
+        set_validation_errors(result.errors);
+        return;
+      }
+
+      set_validation_error(null);
+      set_validation_errors([]);
+      
+      // Store warnings
+      set_warnings(result.warnings);
+      
+      // Save RAW code (no docs) to storage and viewport
+      update_scene_code_storage?.(rawCode);
+      onApplySceneCode?.(rawCode);
+      
+      // Notify parent that user edit was applied (for version history)
+      if (isUserEdit) {
+        onUserEditApplied?.();
+      }
+      
+      // Don't touch localCode - user sees their exact input
+      // Docs will be added when version changes (LLM, reload, manual switch)
     },
     [update_scene_code_editor, update_scene_code_storage, onApplySceneCode, onUserEditApplied]
   );
@@ -432,7 +476,7 @@ export function SceneEditorPanel({
           <Button
             variant="toolbar"
             size="icon"
-            className="h-7 w-7"
+            className="h-7 w-7 relative"
             onClick={() => {
               if (sceneId) {
                 window.dispatchEvent(new CustomEvent("stemify:open-version-history", { detail: { sceneId } }));
@@ -442,6 +486,11 @@ export function SceneEditorPanel({
             title="Versions"
           >
             <FileStack className="h-4 w-4" />
+            {versionCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 flex items-center justify-center text-[10px] font-medium text-black bg-[var(--accent-primary)] rounded-full">
+                {versionCount > 99 ? "99" : versionCount}
+              </span>
+            )}
           </Button>
         </div>
 

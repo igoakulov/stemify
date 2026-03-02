@@ -15,7 +15,10 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Stemify",
-  description: "Interactive STEM visualizations powered by LLMs",
+  description: "Learn (or teach) STEM visually with interactive scenes and AI.",
+  icons: {
+    icon: [{ url: "/favicon.png", type: "image/png" }],
+  },
 };
 
 export default function RootLayout({

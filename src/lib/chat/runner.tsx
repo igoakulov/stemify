@@ -6,7 +6,7 @@ import {
   load_openrouter_model_id,
 } from "@/lib/settings/storage";
 import { log_scene_generated } from "@/lib/settings/scene-log";
-import { add_version, ensure_version_history, get_scene_code as get_scene_code_from_store, type SavedScene } from "@/lib/scene/store";
+import { add_version, ensure_version_history, get_scene_code as get_scene_code_from_store, load_saved_scenes, type SavedScene } from "@/lib/scene/store";
 
 import type { ChatMessage, ChatThreadId } from "@/lib/chat/types";
 import { parse_model_output } from "@/lib/chat/parse";
@@ -224,8 +224,13 @@ export async function run_chat_turn(options: RunOptions): Promise<void> {
   // Ensure version history exists (for legacy scenes)
   const scene_with_versions = ensure_version_history(options.scene);
 
+  // Reload scene from storage to get latest state (e.g., title may have been generated
+  // by on_first_assistant_response while LLM was processing)
+  const all_scenes = load_saved_scenes();
+  const latest_scene = all_scenes.find((s) => s.id === scene_with_versions.id) ?? scene_with_versions;
+
   // Add new version from LLM response
-  add_version(scene_with_versions, options.user_text, scene_code);
+  add_version(latest_scene, options.user_text, scene_code);
 
   log_scene_generated({
     scene_id: scene_with_versions.id,

@@ -5,7 +5,7 @@ export type CameraState = {
 
 export type GridConfig = {
   enabled: boolean;    // Whether grid snapping is enabled
-  size: number;        // Grid snap size (set by LLM via setGrid)
+  size: number;        // Grid snap size (set by LLM via scene.grid)
 };
 
 export type SceneVersion = {

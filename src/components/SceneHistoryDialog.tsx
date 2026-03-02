@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { Trash2, ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -64,6 +64,7 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
   const [confirm_delete_id, set_confirm_delete_id] = useState<string | null>(
     null,
   );
+  const [focused_index, set_focused_index] = useState<number | null>(null);
 
   const refresh = () => {
     set_scenes(load_saved_scenes());
@@ -122,6 +123,10 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
       check_missing_starters();
     };
 
+    const on_close = () => {
+      set_open(false);
+    };
+
     const on_new = () => {
       window.dispatchEvent(new Event("stemify:confirm-new-scene"));
     };
@@ -132,12 +137,14 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
     };
 
     window.addEventListener("stemify:open-history", on_open);
+    window.addEventListener("stemify:close-history", on_close);
     window.addEventListener("stemify:new-scene", on_new);
     window.addEventListener("stemify:scenes-changed", on_scenes_changed);
 
     return () => {
       window.cancelAnimationFrame(raf);
       window.removeEventListener("stemify:open-history", on_open);
+      window.removeEventListener("stemify:close-history", on_close);
       window.removeEventListener("stemify:new-scene", on_new);
       window.removeEventListener("stemify:scenes-changed", on_scenes_changed);
     };
@@ -153,6 +160,39 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
     return active ? [active, ...others] : scenes;
   }, [scenes]);
 
+  const handle_key_down = useCallback((e: React.KeyboardEvent) => {
+    const items = sorted_scenes;
+    if (items.length === 0) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      set_focused_index((prev) => {
+        if (prev === null) return 0;
+        return Math.min(prev + 1, items.length - 1);
+      });
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      set_focused_index((prev) => {
+        if (prev === null) return items.length - 1;
+        return Math.max(prev - 1, 0);
+      });
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (focused_index !== null && focused_index < items.length) {
+        const scene = items[focused_index];
+        if (!is_active(scene.id)) {
+          props.onLoadScene(scene);
+          set_open(false);
+          window.dispatchEvent(
+            new CustomEvent("stemify:scenes-changed", {
+              detail: { activeId: scene.id },
+            }),
+          );
+        }
+      }
+    }
+  }, [sorted_scenes, focused_index, props]);
+
   const title = useMemo(() => {
     if (!has_any) return "Scenes";
     return `Scenes (${scenes.length})`;
@@ -162,7 +202,10 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
 
   return (
     <>
-      <Dialog open={open} onOpenChange={set_open}>
+      <Dialog open={open} onOpenChange={(isOpen) => {
+        if (isOpen) set_focused_index(null);
+        set_open(isOpen);
+      }}>
         <DialogContent className="max-w-xl bg-white text-(--main-black) overflow-hidden max-h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
@@ -172,9 +215,14 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
           </DialogHeader>
 
           <div className="flex-1 min-h-0 overflow-y-auto">
-            <div className="space-y-2 pr-2">
-              {sorted_scenes.map((s) => {
+            <div 
+              className="space-y-2 pr-2"
+              onKeyDown={handle_key_down}
+              tabIndex={0}
+            >
+              {sorted_scenes.map((s, index) => {
                 const is_current = is_active(s.id);
+                const is_focused = focused_index === index;
 
                 return (
                   <div
@@ -183,7 +231,9 @@ export function SceneHistoryDialog(props: SceneHistoryDialogProps) {
                       "flex items-center justify-between rounded-lg border px-3 py-2 min-w-0 gap-2 overflow-hidden",
                       is_current 
                         ? "border-amber-300 bg-amber-50 sticky top-0 z-10" 
-                        : "border-zinc-200 bg-zinc-50 cursor-pointer hover:bg-zinc-100"
+                        : is_focused
+                          ? "border-amber-400 bg-amber-100 ring-2 ring-amber-400 ring-offset-1"
+                          : "border-zinc-200 bg-zinc-50 cursor-pointer hover:bg-zinc-100"
                     )}
                     onClick={() => {
                       if (!is_current) {

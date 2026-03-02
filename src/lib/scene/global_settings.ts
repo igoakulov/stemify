@@ -4,9 +4,9 @@ const FLY_SPEED_INDEX_STORAGE_KEY = "stemify.camera.flySpeedIndex";
 export function load_grid_snap(): boolean {
   try {
     const raw = window.localStorage.getItem(GRID_SNAP_STORAGE_KEY);
-    return raw === "false" ? false : true;
+    return raw === "true" ? true : false;
   } catch {
-    return true;
+    return false;
   }
 }
 

@@ -4,7 +4,7 @@ Generate a concise, descriptive title (max 50 characters) for this conversation 
 
 ## Rules
 
-- Maximum 50 characters
+- Maximum 30 characters
 - Be concise but descriptive
 - Focus on the topic or question
 - Use title case (capitalize major words)

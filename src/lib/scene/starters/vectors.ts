@@ -18,7 +18,6 @@ export function get_starter_vectors(): SavedScene {
         description: "Starter scene",
         userEditCount: 0,
         sceneCode: `scene.grid(0.5);
-
 scene.axes({
   id: "axes",
   x: [0, 5],
@@ -27,36 +26,42 @@ scene.axes({
   position: [0, 0, 0],
   selectable: false
 });
-
 scene.line({
   id: "v1",
   points: [[0, 0, 0], [2, 1.1, 1.4]],
   thickness: 0.04,
+  tension: 0.5,
   arrow: "end",
+  offset: [0, 0, 0],
+  lookat: [0, 0, 1],
+  spin: 0,
   color: "#F25C54",
   selectable: true
 });
-
 scene.line({
   id: "v2",
   points: [[0, 0, 0], [1, 1.9, 0.4]],
   thickness: 0.04,
+  tension: 0.5,
   arrow: "end",
+  offset: [0, 0, 0],
   lookat: [0, 0, 1],
-  spin: 0,  color: "#2D7FF9",
+  spin: 0,
+  color: "#2D7FF9",
   selectable: true
 });
-
 scene.line({
   id: "v_sum",
   points: [[0, 0, 0], [3, 3, 1.8]],
   thickness: 0.04,
+  tension: 0.5,
   arrow: "end",
+  offset: [0, 0, 0],
   lookat: [0, 0, 1],
-  spin: 0,  color: "#2FBF71",
+  spin: 0,
+  color: "#2FBF71",
   selectable: true
 });
-
 scene.tooltip({
   id: "v_sum",
   title: "Vector Addition",
@@ -65,27 +70,30 @@ scene.tooltip({
     { label: "Components", value: "(3, 3, 1.8)" }
   ]
 });
-
 scene.line({
   id: "parallelogram_1",
   points: [[2, 1.1, 1.4], [3, 3, 1.8]],
   thickness: 0.02,
+  tension: 0.5,
   arrow: "none",
+  offset: [0, 0, 0],
   lookat: [0, 0, 1],
-  spin: 0,  color: "#AAB2BD",
+  spin: 0,
+  color: "#AAB2BD",
   selectable: true
 });
-
 scene.line({
   id: "parallelogram_2",
   points: [[1, 1.9, 0.4], [3, 3, 1.8]],
   thickness: 0.02,
+  tension: 0.5,
   arrow: "none",
+  offset: [0, 0, 0],
   lookat: [0, 0, 1],
-  spin: 0,  color: "#AAB2BD",
+  spin: 0,
+  color: "#AAB2BD",
   selectable: true
 });
-
 scene.label({
   id: "label_v1",
   text: "v1",
@@ -94,7 +102,6 @@ scene.label({
   fontSizePx: 14,
   selectable: true
 });
-
 scene.label({
   id: "label_v2",
   text: "v2",
@@ -103,7 +110,6 @@ scene.label({
   fontSizePx: 14,
   selectable: true
 });
-
 scene.label({
   id: "label_sum",
   text: "v1 + v2",

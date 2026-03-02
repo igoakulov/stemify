@@ -12,7 +12,7 @@ import { CheckIcon, CopyIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-reac
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import { memo, useState, useEffect, useRef, type FC, type ReactNode, createContext, useContext } from "react";
+import { memo, useState, useEffect, useRef, useMemo, type FC, type ReactNode, type ComponentProps, createContext, useContext } from "react";
 
 import { cn } from "@/lib/utils";
 import { get_error_context, subscribe_banner, get_banner } from "@/lib/chat/banner";
@@ -83,7 +83,7 @@ function extractCodeText(children: ReactNode): string {
 }
 
 // Collapsible code block component
-const CollapsibleCodeBlock: FC<{ children: ReactNode; className?: string }> = ({ children, className }) => {
+const CollapsibleCodeBlock: FC<{ children: ReactNode; className?: string }> = memo(({ children, className }) => {
   const { isStreamingThisMessage, mode } = useStreamingContext();
   const codeText = extractCodeText(children);
 
@@ -217,7 +217,9 @@ const CollapsibleCodeBlock: FC<{ children: ReactNode; className?: string }> = ({
       </div>
     </div>
   );
-};
+});
+
+CollapsibleCodeBlock.displayName = "CollapsibleCodeBlock";
 
 function normalize_latex_delimiters(input: string): string {
   return (
@@ -263,6 +265,15 @@ const components = memoizeMarkdownComponents({
   },
 });
 
+function PreComponent({ className, children }: ComponentProps<"pre">) {
+  return (
+    <CollapsibleCodeBlock className={className}>
+      {children}
+    </CollapsibleCodeBlock>
+  );
+}
+PreComponent.displayName = "PreComponent";
+
 export const MarkdownText = memo(function MarkdownText() {
   // Message-specific status - only this message's streaming state
   const status = useMessage((m) => m.status);
@@ -273,12 +284,15 @@ export const MarkdownText = memo(function MarkdownText() {
     (m) => m.metadata?.custom?.stemify_mode as "ask" | "build" | "fix" | undefined,
   );
 
-  const contextValue: StreamingContextValue = {
-    isStreamingThisMessage,
-    codeBlockIndex: 0,
-    isFirstCodeBlock: true,
-    mode,
-  };
+  const contextValue = useMemo<StreamingContextValue>(
+    () => ({
+      isStreamingThisMessage,
+      codeBlockIndex: 0,
+      isFirstCodeBlock: true,
+      mode,
+    }),
+    [isStreamingThisMessage, mode],
+  );
 
   return (
     <StreamingContext.Provider value={contextValue}>
@@ -291,11 +305,7 @@ export const MarkdownText = memo(function MarkdownText() {
           className="aui-md select-text"
           components={{
             ...components,
-            pre: ({ className, children }) => (
-              <CollapsibleCodeBlock className={className}>
-                {children}
-              </CollapsibleCodeBlock>
-            ),
+            pre: PreComponent,
           }}
         />
       </>

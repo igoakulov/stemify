@@ -123,67 +123,51 @@ function format_single_line_object(code: string): string {
 export function format_scene_code(code: string): string {
   const lines = code.split("\n");
   const formattedLines = lines.map((line) => format_single_line_object(line));
-  return formattedLines.join("\n");
+  return formattedLines.join("\n").trim();
 }
 
-const DOCS_MARKER = `/*====== STEMIFY GUIDE =======`;
-const STEMIFY_INTRO = `1. ASK assistant about a subject
-2. Tell him to BUILD a scene about it
+const DOCS_MARKER = `/*==== STEMIFY =====`;
+const STEMIFY_INTRO = `Welcome! Stemify helps you learn (or teach) STEM visually with interactive SCENES.
+
+Each scene has:
+- Scene: what you see and interact with
+- Chat: where Assistant answers your questions and builds scenes for you
+- Editor (this): where you edit the scene
+
+Explore "Starter Scenes" to get comfortable.
+
+---
+
+How to create scenes:
+
+1. ASK assistant about a subject or problem
+2. Tell him to BUILD a scene for it
 3. Rotate, fly, explore, click on objects
-4. Change their position, size, color etc...
-5. Customize using DOCS below`;
+4. Change their parameters in this editor
+5. Play with position, size, color etc.
 
-const STEMIFY_DOCS = `========= USING DOCS ==========
+---
 
-1. Choose shape / method, copy lines
-2. Paste them above STEMIFY GUIDE
-3. Change or remove parameters
+How to build shapes in editor:
 
-=========== SHAPES ===========
+1. Go ABOVE ==== STEMIFY ==== line
+2. Type "scene." pick from suggested shapes
+2. Hover on it to see its parameters
+3. Add parameters inside "scene.shape({…})"
+5. Hover on parameter for more help
 
-HINTS:
-* lookat: from origin, shape would face this point
-* use groups to move shapes as one
-* 3+ points and cuts give new shapes
+See examples in Starter Scenes!
+Good luck! ;)
 
-scene.point({})
-scene.line({})
-scene.curve({})
-scene.circle({})
-scene.poly2({})
-scene.sphere({})
-scene.cylinder({})
-scene.donut({})
-scene.poly3({})
-
-======= COMPLEX SHAPES =======
-
-scene.group({})
-scene.mesh({})
-
-======== PRESENTATION ========
-
-scene.label({})
-scene.tooltip({})
-scene.animation({})
-
-=========== GENERAL ===========
-
-scene.grid(0.5) // round values, snap to grid
-scene.smoothness(64) // round object smoothness, 64 (fastest) | 128 (balanced) | 256 (smoothest)
-scene.camera({
-  position: [6, 4, 8],
-  lookat: [0, 0, 0]
-})
-======= STEMIFY GUIDE =======*/`;
+======= STEMIFY =====*/`;
 
 export function append_docs(code: string): string {
   const stripped = strip_docs(code);
-  return `${stripped}\n\n${DOCS_MARKER}\n\n${STEMIFY_INTRO}\n\n${STEMIFY_DOCS}`;
+  return `${stripped}\n\n\n${DOCS_MARKER}\n\n${STEMIFY_INTRO}`;
 }
 
 export function strip_docs(code: string): string {
-  const markerRegex = /\/\*={4,}.*(?:STEMIFY|DOCS|GUIDE|HOW TO).*\*\//i;
+  const markerRegex = /\/\*={4,}.*(?:STEMIFY|DOCS|GUIDE|HOW TO).*/i;
   const markerMatch = code.match(markerRegex);
   if (!markerMatch) return code;
   return code.slice(0, markerMatch.index);

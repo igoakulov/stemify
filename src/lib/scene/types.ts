@@ -8,7 +8,7 @@ export type ObjectMeta = {
   type: string;
 };
 
-export type AddPoly2DConfig = {
+export type Poly2Config = {
   id: string;
   points: Vec2[];
   offset?: Vec3;
@@ -20,7 +20,7 @@ export type AddPoly2DConfig = {
   selectable?: boolean;
 };
 
-export type AddPointConfig = {
+export type PointConfig = {
   id: string;
   position?: Vec3;
   offset?: Vec3;
@@ -28,100 +28,101 @@ export type AddPointConfig = {
   selectable?: boolean;
 };
 
-export type AddLineConfig = {
+export type LineConfig = {
   id: string;
   points: Vec3[];
-  tension?: number;
-  lookat?: Vec3;
-  spin?: number;
   thickness?: number;
+  tension?: number;
   arrow?: "none" | "start" | "end" | "both";
   offset?: Vec3;
+  lookat?: Vec3;
+  spin?: number;
   color?: string;
   selectable?: boolean;
 };
 
-export type AddCurveConfig = {
+export type CurveConfig = {
   id: string;
-  steps?: number;
-  tMin: number;
-  tMax: number;
+  tMin: string | number;
+  tMax: string | number;
   x: string | number;
   y: string | number;
-  z: string | number;
-  lookat?: Vec3;
-  spin?: number;
+  z?: string | number;
+  steps?: number;
   thickness?: number;
   arrow?: "none" | "start" | "end" | "both";
   offset?: Vec3;
+  lookat?: Vec3;
+  spin?: number;
   color?: string;
   selectable?: boolean;
 };
 
-export type AddCircleConfig = {
+export type CircleConfig = {
   id: string;
+  radius?: number;
   position?: Vec3;
   offset?: Vec3;
-  radius?: number;
   lookat?: Vec3;
+  spin?: number;
   stretch?: Vec3;
   anglecut?: [number, number] | number;
-  spin?: number;
   color?: string;
   opacity?: number;
   outline?: number;
   selectable?: boolean;
 };
 
-export type AddSphereConfig = {
+export type SphereConfig = {
   id: string;
+  radius: number;
   position?: Vec3;
   offset?: Vec3;
-  radius: number;
+  lookat?: Vec3;
+  spin?: number;
   stretch?: Vec3;
   anglecut?: [number, number] | number;
   flatcut?: [number, number] | number;
-  lookat?: Vec3;
-  spin?: number;
   color?: string;
   opacity?: number;
   selectable?: boolean;
 };
 
-export type AddCylinderConfig = {
+export type CylinderConfig = {
   id: string;
-  position: Vec3;
-  height?: number[] | number;
-  radius?: number[];
-  offset?: Vec3;
-  anglecut?: [number, number] | number;
-  spin?: number;
-  lookat?: Vec3;
-  color?: string;
-  opacity?: number;
-  selectable?: boolean;
-};
-
-export type AddPoly3DConfig = {
-  id: string;
-  points: Vec3[];
-  offset?: Vec3;
-  color?: string;
-  opacity?: number;
-  lookat?: Vec3;
-  spin?: number;
-  selectable?: boolean;
-};
-
-export type AddDonutConfig = {
-  id: string;
+  height?: number | number[];
+  radius?: number | number[];
   position?: Vec3;
   offset?: Vec3;
+  lookat?: Vec3;
+  spin?: number;
+  anglecut?: [number, number] | number;
+  color?: string;
+  opacity?: number;
+  selectable?: boolean;
+};
+
+export type Poly3Config = {
+  id: string;
+  points: Vec3[];
+  position?: Vec3;
+  offset?: Vec3;
+  color?: string;
+  opacity?: number;
+  lookat?: Vec3;
+  spin?: number;
+  selectable?: boolean;
+};
+
+export type DonutConfig = {
+  id: string;
   radius: number;
   thickness: number;
+  position?: Vec3;
+  offset?: Vec3;
   lookat?: Vec3;
-  anglecut?: [number, number] | number;
   spin?: number;
+  anglecut?: [number, number] | number;
   color?: string;
   opacity?: number;
   selectable?: boolean;
@@ -129,40 +130,39 @@ export type AddDonutConfig = {
 
 export type AxisRange = [number, number] | [];
 
-export type AddAxesConfig = {
+export type AxesConfig = {
   id?: string;
   x?: AxisRange;
   y?: AxisRange;
   z?: AxisRange;
-  length?: number;
   position?: Vec3;
   selectable?: boolean;
 };
 
-export type AddLabelConfig = {
+export type LabelConfig = {
   id: string;
   text: string;
-  position: Vec3;
+  position?: Vec3;
   color?: string;
   fontSizePx?: number;
   selectable?: boolean;
 };
 
-export type AddGroupConfig = {
+export type GroupConfig = {
   id: string;
   children: string[];
+  offset?: Vec3;
   lookat?: Vec3;
   spin?: number;
-  offset?: Vec3;
   selectable?: boolean;
 };
 
-export type AddAnimationConfig = {
+export type AnimationConfig = {
   id: string;
   updateFunction: string;
 };
 
-export type AddCustomMeshConfig = {
+export type MeshConfig = {
   id: string;
   createFn: string;
   position?: Vec3;
@@ -173,38 +173,38 @@ export type AddCustomMeshConfig = {
   selectable?: boolean;
 };
 
-export type AddTooltipConfig = {
+export type TooltipConfig = {
   id: string;
   title: string;
-  properties?: Array<{ label: string; value: string }>;
+  properties?: string | Array<{ label: string; value: string }>;
 };
 
-export type SetCameraConfig = {
+export type CameraConfig = {
   position?: Vec3;
   lookat?: Vec3;
 };
 
 export type SceneApi = {
-  point: (config: AddPointConfig) => void;
-  line: (config: AddLineConfig) => void;
-  curve: (config: AddCurveConfig) => void;
-  poly2: (config: AddPoly2DConfig) => void;
-  circle: (config: AddCircleConfig) => void;
+  point: (config: PointConfig) => void;
+  line: (config: LineConfig) => void;
+  curve: (config: CurveConfig) => void;
+  poly2: (config: Poly2Config) => void;
+  circle: (config: CircleConfig) => void;
 
-  sphere: (config: AddSphereConfig) => void;
-  cylinder: (config: AddCylinderConfig) => void;
-  poly3: (config: AddPoly3DConfig) => void;
-  donut: (config: AddDonutConfig) => void;
+  sphere: (config: SphereConfig) => void;
+  cylinder: (config: CylinderConfig) => void;
+  poly3: (config: Poly3Config) => void;
+  donut: (config: DonutConfig) => void;
 
-  axes: (config?: AddAxesConfig) => void;
-  label: (config: AddLabelConfig) => void;
-  group: (config: AddGroupConfig) => void;
-  animation: (config: AddAnimationConfig) => void;
-  mesh: (config: AddCustomMeshConfig) => void;
-  tooltip: (config: AddTooltipConfig) => void;
+  axes: (config?: AxesConfig) => void;
+  label: (config: LabelConfig) => void;
+  group: (config: GroupConfig) => void;
+  animation: (config: AnimationConfig) => void;
+  mesh: (config: MeshConfig) => void;
+  tooltip: (config: TooltipConfig) => void;
   grid: (size: number) => void;
   smoothness: (segments: number) => void;
-  camera: (config: SetCameraConfig) => void;
+  camera: (config: CameraConfig) => void;
 
   getObject: (id: string) => THREE.Object3D | undefined;
   listObjects: () => ObjectMeta[];

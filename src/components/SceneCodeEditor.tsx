@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Editor, { OnMount } from "@monaco-editor/react";
 import type { Monaco } from "@monaco-editor/react";
 
+import { sceneApiDeclaration } from "@/lib/scene/api-docs";
+
 type SceneCodeEditorProps = {
   value: string;
   onChange: (value: string) => void;
@@ -42,7 +44,9 @@ export function SceneCodeEditor({
       monaco.editor.defineTheme("stemify-dark", {
         base: "vs-dark",
         inherit: true,
-        rules: [],
+        rules: [
+          { token: "comment", foreground: "997719" },
+        ],
         colors: {
           // Primary backgrounds - solid colors, no transparency
           "editor.background": "#09090b",
@@ -77,6 +81,55 @@ export function SceneCodeEditor({
       });
       monaco.editor.setTheme("stemify-dark");
 
+      // Disable JS stdlib - removes Array, Promise, DOM, etc.
+      monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
+        noLib: true,
+        allowNonTsExtensions: true,
+        suppressExcessPropertyErrors: true,
+        suppressImplicitAnyIndexErrors: true,
+      });
+
+      // Disable semantic validation - keep syntax errors only
+      monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+        noSemanticValidation: true,
+        noSyntaxValidation: false,
+      });
+
+      // Add Math back
+      monaco.languages.typescript.javascriptDefaults.addExtraLib(
+        `
+declare const Math: {
+  PI: number;
+  E: number;
+  abs(x: number): number;
+  acos(x: number): number;
+  asin(x: number): number;
+  atan(x: number): number;
+  atan2(y: number, x: number): number;
+  ceil(x: number): number;
+  cos(x: number): number;
+  exp(x: number): number;
+  floor(x: number): number;
+  log(x: number): number;
+  max(...values: number[]): number;
+  min(...values: number[]): number;
+  pow(x: number, y: number): number;
+  random(): number;
+  round(x: number): number;
+  sin(x: number): number;
+  sqrt(x: number): number;
+  tan(x: number): number;
+};
+`,
+        "math.d.ts",
+      );
+
+      // Add scene API type declarations
+      monaco.languages.typescript.javascriptDefaults.addExtraLib(
+        sceneApiDeclaration,
+        "scene-api.d.ts",
+      );
+
       editor.updateOptions({
         links: true,
         cursorBlinking: "smooth",
@@ -101,7 +154,19 @@ export function SceneCodeEditor({
         overviewRulerLanes: 0,
         tabIndex: -1,
         accessibilitySupport: "off",
+        quickSuggestions: {
+          other: true,
+          comments: false,
+          strings: false,
+        },
+        suggestOnTriggerCharacters: true, // KEEP
+        wordBasedSuggestions: "off",
+        suggest: {
+          showKeywords: false, // KEEP
+          showMethods: false,
+        },
         scrollbar: {
+          useShadows: false,
           vertical: "auto",
           horizontal: "auto",
           verticalScrollbarSize: 8,
@@ -120,16 +185,24 @@ export function SceneCodeEditor({
         });
       }
 
-      // Defocus editor on Escape key
-      editor.addCommand(monaco.KeyCode.Escape, () => {
-        // Close any open widgets (like color picker)
-        editor.getContribution("editor.contrib.widgetController")?. dispose();
-        // Try to blur the editor
-        const textarea = editor.getDomNode()?.querySelector("textarea") as HTMLElement | null;
-        textarea?.blur();
-        // Focus the body as fallback
-        document.body.focus();
-      });
+      // Escape key handler for Electron - defocus Monaco on first Escape, close drawer on second
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "Escape") {
+          const isFocused = editor.hasTextFocus() || editor.hasWidgetFocus();
+          
+          if (isFocused) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            if (document.activeElement instanceof HTMLElement) {
+              document.activeElement.blur();
+            }
+            
+            document.body.focus();
+          }
+        }
+      };
+      window.addEventListener("keydown", handleKeyDown, true); // capture phase
 
       // Register color provider to preserve hex format
       monaco.languages.registerColorProvider(language, {

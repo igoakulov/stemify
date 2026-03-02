@@ -11,7 +11,7 @@ import { ObjectRegistry } from "@/lib/scene/object_registry";
 import type { SceneApi, Vec3 } from "@/lib/scene/types";
 import { parse_color } from "@/lib/scene/color";
 
-// Custom curve class for addCurve - passes through points directly
+// Custom curve class for curve - passes through points directly
 class PointsCurve extends THREE.Curve<THREE.Vector3> {
   constructor(private points: THREE.Vector3[]) {
     super();
@@ -65,11 +65,6 @@ function snap_vec3(v: Vec3 | undefined, size: number): Vec3 | undefined {
   ];
 }
 
-function snap_points(points: Vec3[], size: number): Vec3[] {
-  if (size <= 0) return points;
-  return points.map((p) => snap_vec3(p, size)!);
-}
-
 export type SceneApiReturn = {
   api: SceneApi;
   get_camera_was_set: () => boolean;
@@ -102,15 +97,11 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
     return snap_vec3(center, grid_enabled ? grid_size : 0) ?? [0, 0, 0];
   }
 
-  function get_snapped_points(points: Vec3[]): Vec3[] {
-    return snap_points(points, grid_enabled ? grid_size : 0);
-  }
-
   // 2D PRIMITIVES
 
   const point: SceneApi["point"] = ({
     id,
-    center,
+    position,
     offset,
     color,
     selectable = true,
@@ -123,7 +114,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
     }
 
     const mesh = new THREE.Mesh(geometry, material);
-    const base = get_snapped_center(center);
+    const base = get_snapped_center(position);
     const offset_val = offset ?? [0, 0, 0];
     mesh.position.set(
       base[0] + offset_val[0],
@@ -140,7 +131,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
   const line: SceneApi["line"] = ({
     id,
     points,
-    tension = 0.5,
+    tension = 1,
     lookat: lookatTarget,
     spin = 0,
     thickness = 0,
@@ -149,27 +140,33 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
     color,
     selectable = true,
   }) => {
-    let point_array = get_snapped_points(points);
+    // Apply offset to all points (world space) - don't snap yet
+    const point_array = offset
+      ? points.map((p) => [
+          (p[0] ?? 0) + (offset[0] ?? 0),
+          (p[1] ?? 0) + (offset[1] ?? 0),
+          (p[2] ?? 0) + (offset[2] ?? 0),
+        ])
+      : points.map((p) => [p[0] ?? 0, p[1] ?? 0, p[2] ?? 0]);
 
-    // Apply offset to all points (world space)
-    if (offset) {
-      const s = get_snapped_center(offset);
-      point_array = point_array.map((p) => [
-        p[0] + s[0],
-        p[1] + s[1],
-        p[2] + s[2],
-      ]);
+    if (grid_enabled && grid_size > 0) {
     }
 
-    // Calculate midpoint as pivot point
-    const sum = point_array.reduce(
-      (acc, p) => [acc[0] + p[0], acc[1] + p[1], acc[2] + p[2]],
-      [0, 0, 0],
-    );
+    // Calculate AABB center as pivot point
+    const aabb_min = [
+      Math.min(...point_array.map((p) => p[0])),
+      Math.min(...point_array.map((p) => p[1])),
+      Math.min(...point_array.map((p) => p[2])),
+    ];
+    const aabb_max = [
+      Math.max(...point_array.map((p) => p[0])),
+      Math.max(...point_array.map((p) => p[1])),
+      Math.max(...point_array.map((p) => p[2])),
+    ];
     const midpoint = [
-      sum[0] / point_array.length,
-      sum[1] / point_array.length,
-      sum[2] / point_array.length,
+      (aabb_min[0] + aabb_max[0]) / 2,
+      (aabb_min[1] + aabb_max[1]) / 2,
+      (aabb_min[2] + aabb_max[2]) / 2,
     ];
     const anchor = v3(midpoint);
 
@@ -256,6 +253,15 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
       mesh.rotateOnAxis(spin_axis, (spin * Math.PI) / 180);
     }
 
+    // Apply all transforms first, then snap anchor position
+    if (grid_enabled && grid_size > 0) {
+      const snappedAnchor = snap_vec3(
+        [anchor.x, anchor.y, anchor.z],
+        grid_size,
+      ) ?? [anchor.x, anchor.y, anchor.z];
+      anchor.set(snappedAnchor[0], snappedAnchor[1], snappedAnchor[2]);
+    }
+
     // Position mesh at anchor
     mesh.position.copy(anchor);
 
@@ -339,7 +345,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
     tMax,
     x: xInput,
     y: yInput,
-    z: zInput,
+    z: zInput = 0,
     lookat: lookatTarget,
     spin = 0,
     thickness = 0,
@@ -352,6 +358,10 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
     const point_array: Vec3[] = [];
 
     try {
+      // Evaluate tMin/tMax if formulas
+      const tMinVal = typeof tMin === "string" ? new Function(`return ${tMin}`)() : tMin;
+      const tMaxVal = typeof tMax === "string" ? new Function(`return ${tMax}`)() : tMax;
+
       const xExpr = typeof xInput === "string" ? xInput : String(xInput);
       const yExpr = typeof yInput === "string" ? yInput : String(yInput);
       const zExpr = typeof zInput === "string" ? zInput : String(zInput);
@@ -361,14 +371,14 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
       const zFn = new Function("t", `return ${zExpr}`);
 
       for (let i = 0; i < steps; i++) {
-        const t = tMin + (tMax - tMin) * (i / (steps - 1));
+        const t = tMinVal + (tMaxVal - tMinVal) * (i / (steps - 1));
         const x = xFn(t);
         const y = yFn(t);
         const z = zFn(t);
         point_array.push([x, y, z]);
       }
     } catch (e) {
-      console.warn("Invalid formula expression in addCurve:", e);
+      console.warn("Invalid formula expression in curve:", e);
       return;
     }
 
@@ -382,15 +392,21 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
       }
     }
 
-    // Calculate midpoint as pivot point
-    const sum = point_array.reduce(
-      (acc, p) => [acc[0] + p[0], acc[1] + p[1], acc[2] + p[2]],
-      [0, 0, 0],
-    );
+    // Calculate AABB center as pivot point
+    const aabb_min = [
+      Math.min(...point_array.map((p) => p[0])),
+      Math.min(...point_array.map((p) => p[1])),
+      Math.min(...point_array.map((p) => p[2])),
+    ];
+    const aabb_max = [
+      Math.max(...point_array.map((p) => p[0])),
+      Math.max(...point_array.map((p) => p[1])),
+      Math.max(...point_array.map((p) => p[2])),
+    ];
     const midpoint = [
-      sum[0] / point_array.length,
-      sum[1] / point_array.length,
-      sum[2] / point_array.length,
+      (aabb_min[0] + aabb_max[0]) / 2,
+      (aabb_min[1] + aabb_max[1]) / 2,
+      (aabb_min[2] + aabb_max[2]) / 2,
     ];
     const anchor = v3(midpoint);
 
@@ -544,29 +560,23 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
   }) => {
     if (points.length < 3) return;
 
-    const snapped_points = points.map((p) => {
-      const s = grid_enabled ? grid_size : 0;
-      return [snap_to_grid(p[0], s), snap_to_grid(p[1], s)];
-    });
+    // Use points as-is (no snapping - preserves local shape composition)
+    // Only snap position and offset for global placement
+    if (grid_enabled && grid_size > 0) {
+    }
 
     // Compute bounding box center
-    const xs = snapped_points.map((p) => p[0]);
-    const ys = snapped_points.map((p) => p[1]);
+    const xs = points.map((p) => p[0] ?? 0);
+    const ys = points.map((p) => p[1] ?? 0);
     const centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
     const centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
 
     // Create shape centered at origin
     const shape = new THREE.Shape();
-    shape.moveTo(
-      snapped_points[0][0] - centerX,
-      snapped_points[0][1] - centerY,
-    );
+    shape.moveTo(points[0][0] - centerX, points[0][1] - centerY);
 
-    for (let i = 1; i < snapped_points.length; i++) {
-      shape.lineTo(
-        snapped_points[i][0] - centerX,
-        snapped_points[i][1] - centerY,
-      );
+    for (let i = 1; i < points.length; i++) {
+      shape.lineTo(points[i][0] - centerX, points[i][1] - centerY);
     }
     shape.closePath();
 
@@ -582,20 +592,33 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
 
     const mesh = new THREE.Mesh(geometry, material);
 
-    // Position: if provided use it, otherwise use center
+    // Position: if provided use it, otherwise use center - DON'T snap yet
+    let finalPos: Vec3;
     if (position) {
-      mesh.position.set(position[0], position[1], position[2]);
+      finalPos = [position[0] ?? 0, position[1] ?? 0, position[2] ?? 0];
     } else {
-      mesh.position.set(centerX, centerY, 0);
+      finalPos = [centerX, centerY, 0];
     }
 
-    // Apply offset from position (or center if no position)
+    // Apply offset (don't snap yet)
     if (offset) {
-      const so = get_snapped_center(offset);
-      mesh.position.x += so[0];
-      mesh.position.y += so[1];
-      mesh.position.z += so[2];
+      finalPos = [
+        finalPos[0] + (offset[0] ?? 0),
+        finalPos[1] + (offset[1] ?? 0),
+        finalPos[2] + (offset[2] ?? 0),
+      ];
     }
+
+    // Apply all transforms first, then snap final position
+    if (grid_enabled && grid_size > 0) {
+      finalPos = [
+        snap_to_grid(finalPos[0], grid_size),
+        snap_to_grid(finalPos[1], grid_size),
+        snap_to_grid(finalPos[2], grid_size),
+      ];
+    }
+
+    mesh.position.set(finalPos[0], finalPos[1], finalPos[2]);
 
     // lookat: rotate from +Z to target direction
     const effective_lookat = lookatTarget ?? [0, 0, 1];
@@ -615,7 +638,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
     deps.registry.add(
       {
         id,
-        type: "poly2d",
+        type: "poly2",
       },
       selectable,
       null,
@@ -626,7 +649,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
 
   const circle: SceneApi["circle"] = ({
     id,
-    center,
+    position,
     offset,
     radius = 1,
     lookat,
@@ -638,14 +661,22 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
     outline,
     selectable = true,
   }) => {
-    // Apply grid snap to center and offset
-    const base = get_snapped_center(center);
-    const snapped_offset = get_snapped_center(offset);
-    const snapped_center: Vec3 = [
-      base[0] + snapped_offset[0],
-      base[1] + snapped_offset[1],
-      base[2] + snapped_offset[2],
+    // Calculate final position from position + offset first, then snap
+    let finalPos: Vec3 = [
+      (position?.[0] ?? 0) + (offset?.[0] ?? 0),
+      (position?.[1] ?? 0) + (offset?.[1] ?? 0),
+      (position?.[2] ?? 0) + (offset?.[2] ?? 0),
     ];
+
+    if (grid_enabled && grid_size > 0) {
+      finalPos = [
+        snap_to_grid(finalPos[0], grid_size),
+        snap_to_grid(finalPos[1], grid_size),
+        snap_to_grid(finalPos[2], grid_size),
+      ];
+    }
+
+    const snapped_center = finalPos;
 
     // anglecut: [thetaStart, thetaLength] in degrees, or single number = thetaLength from 0
     let theta_start = 0;
@@ -776,7 +807,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
 
   const sphere: SceneApi["sphere"] = ({
     id,
-    center,
+    position,
     offset,
     radius,
     stretch,
@@ -788,8 +819,8 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
     opacity,
     selectable = true,
   }) => {
-    // Apply grid snap to center and offset
-    const base = get_snapped_center(center);
+    // Apply grid snap to position and offset
+    const base = get_snapped_center(position);
     const snapped_offset = get_snapped_center(offset);
     const snapped_center: Vec3 = [
       base[0] + snapped_offset[0],
@@ -894,7 +925,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
 
   const cylinder: SceneApi["cylinder"] = ({
     id,
-    center,
+    position,
     height,
     radius,
     offset,
@@ -905,15 +936,6 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
     opacity,
     selectable = true,
   }) => {
-    const snapped_center = get_snapped_center(center);
-    const snapped_offset = offset ? get_snapped_center(offset) : [0, 0, 0];
-
-    const final_center: Vec3 = [
-      snapped_center[0] + snapped_offset[0],
-      snapped_center[1] + snapped_offset[1],
-      snapped_center[2] + snapped_offset[2],
-    ];
-
     // Determine height: use provided, or infer from radius, or default to [1]
     let final_height: number[];
     if (height !== undefined) {
@@ -923,7 +945,9 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
         final_height = height.map((h) => Math.max(0.01, h));
       }
     } else if (radius !== undefined) {
-      final_height = Array(radius.length - 1).fill(1);
+      final_height = Array(
+        (typeof radius === "number" ? 1 : radius.length) - 1,
+      ).fill(1);
     } else {
       final_height = [1];
     }
@@ -931,12 +955,41 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
     // Determine radius: use provided, or default to array of 1s
     let final_radius: number[];
     if (radius !== undefined) {
-      final_radius = radius;
+      final_radius = typeof radius === "number" ? [radius] : radius;
     } else {
       final_radius = Array(final_height.length + 1).fill(1);
     }
 
     const total_height = final_height.reduce((sum, h) => sum + h, 0);
+    const max_radius = Math.max(...final_radius);
+
+    // Calculate AABB center
+    const aabb_min: Vec3 = [-max_radius, -total_height / 2, -max_radius];
+    const aabb_max: Vec3 = [max_radius, total_height / 2, max_radius];
+    const aabb_center: Vec3 = [
+      (aabb_min[0] + aabb_max[0]) / 2,
+      (aabb_min[1] + aabb_max[1]) / 2,
+      (aabb_min[2] + aabb_max[2]) / 2,
+    ];
+
+    // Calculate final position: use provided position, or default to AABB center
+    const snapped_offset = offset ? get_snapped_center(offset) : [0, 0, 0];
+    let finalPos: Vec3;
+    if (position) {
+      const snapped_center = get_snapped_center(position);
+      finalPos = [
+        snapped_center[0] + snapped_offset[0],
+        snapped_center[1] + snapped_offset[1],
+        snapped_center[2] + snapped_offset[2],
+      ];
+    } else {
+      finalPos = [
+        aabb_center[0] + snapped_offset[0],
+        aabb_center[1] + snapped_offset[1],
+        aabb_center[2] + snapped_offset[2],
+      ];
+    }
+
     const group = new THREE.Group();
 
     // anglecut: [start, length] in degrees, starts at +X (three.js cylinder starts at +Z, so add 90°)
@@ -989,7 +1042,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
       current_y += height;
     }
 
-    group.position.set(final_center[0], final_center[1], final_center[2]);
+    group.position.set(finalPos[0], finalPos[1], finalPos[2]);
 
     const look_dir = lookat
       ? v3(lookat).normalize()
@@ -1025,6 +1078,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
   const poly3: SceneApi["poly3"] = ({
     id,
     points,
+    position,
     offset,
     color,
     opacity,
@@ -1033,29 +1087,30 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
     selectable = true,
   }) => {
     if (points.length < 4) {
-      throw new Error("addPoly3D requires at least 4 points");
+      throw new Error("poly3 requires at least 4 points");
     }
 
-    let snapped_points = get_snapped_points(points);
+    // Apply offset (no snapping - preserves local shape composition)
+    const final_points = offset
+      ? points.map((p) => [
+          (p[0] ?? 0) + (offset[0] ?? 0),
+          (p[1] ?? 0) + (offset[1] ?? 0),
+          (p[2] ?? 0) + (offset[2] ?? 0),
+        ])
+      : points.map((p) => [p[0] ?? 0, p[1] ?? 0, p[2] ?? 0]);
 
-    if (offset) {
-      const s = get_snapped_center(offset);
-      snapped_points = snapped_points.map((p) => [
-        p[0] + s[0],
-        p[1] + s[1],
-        p[2] + s[2],
-      ]);
+    if (grid_enabled && grid_size > 0) {
     }
 
     const aabb_min = [
-      Math.min(...snapped_points.map((p) => p[0])),
-      Math.min(...snapped_points.map((p) => p[1])),
-      Math.min(...snapped_points.map((p) => p[2])),
+      Math.min(...final_points.map((p) => p[0])),
+      Math.min(...final_points.map((p) => p[1])),
+      Math.min(...final_points.map((p) => p[2])),
     ];
     const aabb_max = [
-      Math.max(...snapped_points.map((p) => p[0])),
-      Math.max(...snapped_points.map((p) => p[1])),
-      Math.max(...snapped_points.map((p) => p[2])),
+      Math.max(...final_points.map((p) => p[0])),
+      Math.max(...final_points.map((p) => p[1])),
+      Math.max(...final_points.map((p) => p[2])),
     ];
     const aabb_center = [
       (aabb_min[0] + aabb_max[0]) / 2,
@@ -1063,7 +1118,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
       (aabb_min[2] + aabb_max[2]) / 2,
     ];
 
-    const centered_points = snapped_points.map((p) => [
+    const centered_points = final_points.map((p) => [
       p[0] - aabb_center[0],
       p[1] - aabb_center[1],
       p[2] - aabb_center[2],
@@ -1083,8 +1138,16 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
     material.side = THREE.DoubleSide;
 
     const mesh = new THREE.Mesh(convex_geometry, material);
-    mesh.position.set(aabb_center[0], aabb_center[1], aabb_center[2]);
 
+    // If position provided, use it (will snap); otherwise use calculated center (no snap)
+    let finalPos: Vec3;
+    if (position) {
+      finalPos = [position[0] ?? 0, position[1] ?? 0, position[2] ?? 0];
+    } else {
+      finalPos = [...aabb_center];
+    }
+
+    // Apply lookat (rotation)
     const effective_lookat = lookat ?? [0, 0, 1];
     const look_dir = v3(effective_lookat).normalize();
     const default_facing = new THREE.Vector3(0, 0, 1);
@@ -1094,10 +1157,23 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
     );
     mesh.setRotationFromQuaternion(quaternion);
 
+    // Apply spin (rotation)
     if (spin) {
       const spinAxis = new THREE.Vector3(look_dir.x, look_dir.y, look_dir.z);
       mesh.rotateOnWorldAxis(spinAxis, (spin * Math.PI) / 180);
     }
+
+    // Snap final position if explicitly provided
+    if (grid_enabled && grid_size > 0 && position) {
+      finalPos = [
+        snap_to_grid(finalPos[0], grid_size),
+        snap_to_grid(finalPos[1], grid_size),
+        snap_to_grid(finalPos[2], grid_size),
+      ];
+    } else if (grid_enabled && grid_size > 0) {
+    }
+
+    mesh.position.set(finalPos[0], finalPos[1], finalPos[2]);
 
     deps.template.root.add(mesh);
     mesh.userData = { id, selectable };
@@ -1105,7 +1181,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
     deps.registry.add(
       {
         id,
-        type: "poly3d",
+        type: "poly3",
       },
       selectable,
       null,
@@ -1116,7 +1192,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
 
   const donut: SceneApi["donut"] = ({
     id,
-    center,
+    position,
     offset,
     radius,
     thickness,
@@ -1127,8 +1203,8 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
     opacity,
     selectable = true,
   }) => {
-    // Apply grid snap to center and offset
-    const base = get_snapped_center(center);
+    // Apply grid snap to position and offset
+    const base = get_snapped_center(position);
     const snapped_offset = get_snapped_center(offset);
     const snapped_center: Vec3 = [
       base[0] + snapped_offset[0],
@@ -1331,11 +1407,11 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
       }
     });
 
+    // Apply offset (don't snap yet)
     if (offset) {
-      const snapped_offset = get_snapped_center(offset);
-      group.position.x += snapped_offset[0];
-      group.position.y += snapped_offset[1];
-      group.position.z += snapped_offset[2];
+      group.position.x += offset[0] ?? 0;
+      group.position.y += offset[1] ?? 0;
+      group.position.z += offset[2] ?? 0;
     }
 
     // Apply lookat
@@ -1349,6 +1425,13 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
     if (spin) {
       const spinAxis = new THREE.Vector3(...normal);
       group.rotateOnWorldAxis(spinAxis, (spin * Math.PI) / 180);
+    }
+
+    // Snap final position after all transforms
+    if (grid_enabled && grid_size > 0) {
+      group.position.x = snap_to_grid(group.position.x, grid_size);
+      group.position.y = snap_to_grid(group.position.y, grid_size);
+      group.position.z = snap_to_grid(group.position.z, grid_size);
     }
 
     deps.template.root.add(group);
@@ -1414,7 +1497,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
   const mesh: SceneApi["mesh"] = ({
     id,
     createFn,
-    center,
+    position,
     offset,
     color,
     lookat,
@@ -1443,7 +1526,7 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
       mesh.material = material;
     }
 
-    const base = get_snapped_center(center);
+    const base = get_snapped_center(position);
     const snapped_offset = get_snapped_center(offset);
     mesh.position.set(
       base[0] + snapped_offset[0],
@@ -1480,7 +1563,10 @@ export function create_scene_api(deps: SceneApiDeps): SceneApiReturn {
   };
 
   const tooltip: SceneApi["tooltip"] = ({ id, title, properties }) => {
-    deps.registry.register_hover(id, { title, properties });
+    const props = typeof properties === "string" 
+      ? properties.split(",").map((p) => ({ label: p.trim(), value: "" }))
+      : properties;
+    deps.registry.register_hover(id, { title, properties: props });
   };
 
   const grid: SceneApi["grid"] = (size) => {

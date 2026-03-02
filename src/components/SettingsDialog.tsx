@@ -279,7 +279,7 @@ export function SettingsDialog() {
               autoComplete="off"
             />
             <div className="text-xs text-muted-foreground">
-              Local-only: your key is stored in your browser and never logged.
+              Local-only: your key is stored on your device and never logged.
             </div>
             <div className="flex items-center justify-between pt-1">
               {api_key_message && (
@@ -306,7 +306,7 @@ export function SettingsDialog() {
           <div className="space-y-3">
             <div className="text-sm font-medium">System Prompts</div>
             <div className="text-xs text-muted-foreground">
-              Customize your Assistant instructions. Be careful: do NOT remove{" "}
+              Customize Assistant instructions. Do NOT remove{" "}
               {"{{data_fields}}"}.
             </div>
 

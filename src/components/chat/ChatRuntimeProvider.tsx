@@ -32,6 +32,11 @@ import {
 } from "@/lib/chat/store";
 import { load_openrouter_model_id } from "@/lib/settings/storage";
 import {
+  set_validation_error,
+  set_validation_errors,
+  set_warnings,
+} from "@/lib/scene/editor_store";
+import {
   show_error,
   BANNERS,
   get_error_context,
@@ -468,6 +473,9 @@ export function ChatRuntimeProvider(props: ChatRuntimeProviderProps) {
 
       clear_error_context();
       clear_banner();
+      set_validation_error(null);
+      set_validation_errors([]);
+      set_warnings([]);
       set_fix_mode(true);
 
       const controller = new AbortController();

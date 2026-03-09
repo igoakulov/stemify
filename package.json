@@ -4,7 +4,7 @@
   "private": true,
   "main": "electron/main.js",
   "author": "Igo",
-  "description": "Stemify: learn (or teach) STEM visually with interactive scenes and AI. Generate scenes to explore subjects, concepts and problems. Edit objects, experiment, and ask anything you want.",
+  "description": "Stemify - learn (or teach) STEM visually with interactive scenes and AI. Generate scenes to explore subjects, concepts and problems. Edit objects, experiment, and ask anything you want.",
   "license": "MIT",
   "scripts": {
     "dev": "concurrently \"next dev\" \"wait-on http://localhost:3000 && electron .\"",
@@ -21,6 +21,7 @@
     "directories": {
       "output": "dist"
     },
+    "publish": null,
     "files": [
       "electron/**/*",
       "out/**/*",
@@ -30,7 +31,7 @@
       "main": "electron/main.js"
     },
     "win": {
-      "target": "portable",
+      "target": "nsis",
       "icon": "build/icon.ico"
     },
     "mac": {
@@ -43,7 +44,9 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
     }
   },
   "engines": {

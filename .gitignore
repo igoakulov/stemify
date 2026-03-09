@@ -17,8 +17,7 @@
 /.next/
 /out/
 
-# production
-/build
+# distribution
 /dist
 
 # misc

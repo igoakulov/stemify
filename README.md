@@ -1,6 +1,6 @@
 # Stemify
 
-Stemify: learn (or teach) STEM visually with interactive scenes and AI. Generate scenes to explore subjects, concepts and problems. Edit objects, experiment, and ask anything you want. Bring your OpenRouter API key.
+Stemify - learn (or teach) STEM visually with interactive scenes and AI. Generate scenes to explore subjects, concepts and problems. Edit objects, experiment, and ask anything you want. Bring your [OpenRouter](https://openrouter.ai) API key.
 
 [Download for macOS / Windows](https://github.com/igoakulov/stemify/releases)
 

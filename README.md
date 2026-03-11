@@ -6,25 +6,33 @@ Stemify - learn (or teach) STEM visually with interactive scenes and AI. Generat
 
 ![Stemify screenshot](public/stemify.png)
 
+## Why Stemify?
+
+| | Textbooks | ChatGPT (Math/Science) | Stemify |
+|--|-----------|------------------------|---------|
+| **Concept Freedom** | Fixed curriculum | ~70 pre-built topics | **Infinite** - any combination of concepts your chosen AI model can handle |
+| **Presentation** | Static low-fi 2D diagrams | Interactive low-fi 2D graphs | **True 3D**, big-screen presentation (e.g. in class), in-scene object highlighting / annotation / inspection |
+| **Interactivity** | Passive reading | Edit 2-3 parameters | **Rotate/fly** camera, inspect from any angle, view/edit all object parameters |
+| **Scene Customization** | Notes in margin | None | Full editing control via **BUILD mode** (natural language) or **directly in code** with autocomplete |
+| **Model Customization** | N/A | None | **Any model** via OpenRouter + **fully editable** Assistant instructions via system prompts |
+| **History/Versioning** | N/A | Limited | **Full History** - full version history for every scene |
+| **Data Storage** | Physical/digital | Cloud (OpenAI) | **Local-First** - 100% on your device |
+| **Availability** | While you have the book | Mobile only (future availability subject to change) | Desktop, download and keep it **forever** |
+
 ## Features
 
 - **Two Chat Modes**:
   - **BUILD** - Create or update your 3D scene with natural language
   - **ASK** - Get explanations, walkthroughs, and insights (general or scene-specific)
-- **Full control, simple code**: Edit the scene or individual shapes yourself, directly in code (friendly library of shapes, autocomplete and automatic versioning)
-- **Rotate Or Fly**: Choose to rotate camera around center of the scene or freely fly all around (speed, reset)
-- **Convenience**: Hotkeys for everything, recent scenes, autocomplete and build-in documentation, self-troubleshooting
-- **Local-First**: Runs and stores data (only) on your device
-- **Full History**: All settings, sscenes, versions, conversations, backup
+- **Full control, simple code**: Edit full scene or individual shapes yourself, directly in beginner-friendly code (friendly library of shapes, autocomplete)
+- **Rotate Or Fly**: Rotate/zoom camera around center, or freely fly around at 1x-100x speed
+- **Convenience**: Hotkeys for everything, recent scenes, autocomplete and built-in documentation, self-troubleshooting
+- **Full Local History**: Runs and stores data (only) on your device: settings, scenes, versions, conversations, backup
 - **Assistant Customization**: Choose ANY model (some are free), customize instructions and preferences in all system prompts
 
 ## Data Storage
 
-All data is stored locally on your device. No data is sent to any server except OpenRouter for AI requests.
-
-### Desktop App
-
-Data is stored in the system application support folder:
+No data is sent to any server except OpenRouter for AI requests. All data is stored locally on your device:
 
 | Platform | Location |
 |----------|----------|
